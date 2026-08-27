@@ -10,7 +10,7 @@ public struct EnhancementSettings: Equatable {
     public var shadowRichness: Float = 0.3          // Pretos aprofundados
     public var opticalGrain: Float = 0.15           // Grão de sensor analógico
     public var colorVibrance: Float = 0.15          // Vibração Display P3
-    public var enableNeuralEngine: Bool = true      // Ativa o Neural Engine / Restauração Profunda
+    public var enableNeuralEngine: Bool = true      // Ativa a Restauração Neural
     public var neuralTextureDetail: Float = 0.70    // Intensidade da reconstrução de textura
     
     public static let `default` = EnhancementSettings()
@@ -39,7 +39,7 @@ public final class ProRAWProcessor {
             currentImage = NeuralEngineRestorer.shared.enhanceTexture(ciImage: currentImage, intensity: settings.neuralTextureDetail)
         }
         
-        // 2. MICRO-CONTRASTE ÓPTICO (Realce de frequências médias)
+        // 2. MICRO-CONTRASTE ÓPTICO
         if settings.microContrast > 0.01 {
             let radius: Float = isDraft ? 0.8 : 1.1
             let intensity = settings.microContrast * 0.75
@@ -80,14 +80,20 @@ public final class ProRAWProcessor {
             currentImage = applyFastGrain(to: currentImage, amount: settings.opticalGrain)
         }
         
-        guard let cgImage = ciContext.createCGImage(currentImage, from: currentImage.extent) else {
-            return nil
+        // Renderização final na GPU
+        if let cgImage = ciContext.createCGImage(currentImage, from: currentImage.extent) {
+            return UIImage(cgImage: cgImage)
         }
         
-        return UIImage(cgImage: cgImage)
+        // Fallback de segurança para renderização direta
+        if let fallbackCG = ciContext.createCGImage(inputImage, from: inputImage.extent) {
+            return UIImage(cgImage: fallbackCG)
+        }
+        
+        return nil
     }
     
-    /// Carrega e processa a imagem do arquivo (DNG RAW com desativação de filtros ou imagem normal)
+    /// Carrega e processa a imagem do arquivo (DNG RAW ou imagem normal)
     public func loadCIImage(from url: URL, maxDimension: CGFloat? = nil) -> (original: CIImage, cleanRaw: CIImage)? {
         var baseCIImage: CIImage?
         
