@@ -12,7 +12,7 @@ workflows:
       - name: Generate Xcode Project
         script: |
           xcodegen generate
-      - name: Build and Package IPA
+      - name: Build App
         script: |
           xcodebuild -project ProRawEnhancer.xcodeproj \
             -scheme ProRawEnhancer \
@@ -22,9 +22,20 @@ workflows:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            clean build
+            build
+      - name: Package .IPA
+        script: |
+          # Localiza automaticamente onde o Xcode gerou o .app
+          APP_PATH=$(find build -name "ProRawEnhancer.app" -type d | head -n 1)
+          echo "App encontrado em: $APP_PATH"
+          
           mkdir -p Payload
-          cp -r build/Build/Products/Release-iphoneos/ProRawEnhancer.app Payload/
-          zip -r ProRawEnhancer.ipa Payload
+          cp -R "$APP_PATH" Payload/
+          
+          # Compacta a pasta Payload completa
+          zip -qr ProRawEnhancer.ipa Payload
+          
+          # Mostra o tamanho real do arquivo gerado
+          ls -lh ProRawEnhancer.ipa
     artifacts:
       - ProRawEnhancer.ipa
