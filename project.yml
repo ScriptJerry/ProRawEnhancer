@@ -2,12 +2,12 @@ name: ProRawEnhancer
 options:
   bundleIdPrefix: com.proraw.enhancer
   deploymentTarget:
-    iOS: "16.0"
+    iOS: "17.0"
   xcodeVersion: "15.0"
 
 settings:
   base:
-    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
     SWIFT_VERSION: "5.9"
     DEVELOPMENT_TEAM: ""
     CODE_SIGNING_REQUIRED: "NO"
@@ -19,7 +19,7 @@ targets:
   ProRawEnhancer:
     type: application
     platform: iOS
-    deploymentTarget: "16.0"
+    deploymentTarget: "17.0"
     sources:
       - Sources
       - Resources

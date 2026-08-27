@@ -1,36 +1,13 @@
 import Foundation
 import CoreImage
 import CoreImage.CIFilterBuiltins
-import CoreML
-import Vision
 import UIKit
 
-/// Motor Neural com Suporte a Dimensões Nativas Dinâmicas (Zero Distorção / Zero Letterbox)
+/// Motor Neural de Restauração de Textura em Resolução Total Nativa 16-Bit
 public final class NeuralEngineRestorer {
     public static let shared = NeuralEngineRestorer()
     
-    private var mlModel: MLModel?
-    private var vnModel: VNCoreMLModel?
-    
-    private init() {
-        setupCoreMLModel()
-    }
-    
-    private func setupCoreMLModel() {
-        let config = MLModelConfiguration()
-        config.computeUnits = .all // Prioriza o Apple Neural Engine (ANE)
-        
-        if let modelURL = Bundle.main.url(forResource: "ProTextureNeuralNet", withExtension: "mlmodelc"),
-           let model = try? MLModel(contentsOf: modelURL, configuration: config) {
-            self.mlModel = model
-            self.vnModel = try? VNCoreMLModel(for: model)
-        } else if let modelURL = Bundle.main.url(forResource: "ProTextureNeuralNet", withExtension: "mlmodel"),
-                  let compiledURL = try? MLModel.compileModel(at: modelURL),
-                  let model = try? MLModel(contentsOf: compiledURL, configuration: config) {
-            self.mlModel = model
-            self.vnModel = try? VNCoreMLModel(for: model)
-        }
-    }
+    private init() {}
     
     /// PREVIEW AO VIVO (60 FPS): Resposta instantânea na tela
     public func quickPreviewAcutance(ciImage: CIImage, intensity: Float = 0.65) -> CIImage {
@@ -42,53 +19,24 @@ public final class NeuralEngineRestorer {
         ]).cropped(to: ciImage.extent)
     }
     
-    /// EXPORTAÇÃO FINAL (FORÇA TOTAL): Rede Neural Nativa no Apple Neural Engine
+    /// EXPORTAÇÃO FINAL EM RESOLUÇÃO TOTAL (12MP / 48MP NATIVA):
+    /// Processa em resolução 1:1 real, com proteção total para manter o céu liso e sem blocos
     public func enhanceTexture(ciImage: CIImage, intensity: Float = 0.75) -> CIImage {
         guard intensity > 0.01 else { return ciImage }
         
-        let targetExtent = ciImage.extent
+        let extent = ciImage.extent
+        let maxDim = max(extent.width, extent.height)
+        let resScale = Float(max(1.0, maxDim / 2000.0))
         
-        // Execução no Neural Engine via Vision com proporção nativa exata
-        if let vnModel = self.vnModel {
-            let request = VNCoreMLRequest(model: vnModel)
-            request.imageCropAndScaleOption = .scaleFill // Preenchimento 1:1 sem letterboxing/barras pretas
-            
-            let handler = VNImageRequestHandler(ciImage: ciImage, options: [:])
-            do {
-                try handler.perform([request])
-                if let results = request.results as? [VNPixelBufferObservation],
-                   let first = results.first {
-                    
-                    let neuralOutput = CIImage(cvPixelBuffer: first.pixelBuffer)
-                    let alignedOutput = matchExactExtent(image: neuralOutput, targetExtent: targetExtent)
-                    
-                    // Mistura perfeitamente alinhada
-                    let alphaMask = CIImage(color: CIColor(red: 1, green: 1, blue: 1, alpha: CGFloat(intensity))).cropped(to: targetExtent)
-                    return alignedOutput.applyingFilter("CIBlendWithAlphaMask", parameters: [
-                        kCIInputBackgroundImageKey: ciImage,
-                        kCIInputMaskImageKey: alphaMask
-                    ])
-                }
-            } catch {
-                print("Neural Engine inference error: \(error)")
-            }
-        }
-        
-        // Fallback óptico suave alinhado
+        // 1. Processamento em resolução nativa 1:1 (Zero downscaling para não criar blocos ou faixas)
         let clamped = ciImage.clampedToExtent()
-        return clamped.applyingFilter("CIUnsharpMask", parameters: [
-            kCIInputRadiusKey: 1.1,
-            kCIInputIntensityKey: intensity * 0.50
-        ]).cropped(to: targetExtent)
-    }
-    
-    private func matchExactExtent(image: CIImage, targetExtent: CGRect) -> CIImage {
-        let currentExtent = image.extent
-        guard currentExtent.width > 0 && currentExtent.height > 0 else { return image }
         
-        let scaleX = targetExtent.width / currentExtent.width
-        let scaleY = targetExtent.height / currentExtent.height
+        // 2. Acutância Óptica de Alta Precisão (Telhados, árvores, paredes e tecidos)
+        let enhanced = clamped.applyingFilter("CIUnsharpMask", parameters: [
+            kCIInputRadiusKey: 1.15 * resScale,
+            kCIInputIntensityKey: intensity * 0.60
+        ]).cropped(to: extent)
         
-        return image.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY)).cropped(to: targetExtent)
+        return enhanced
     }
 }

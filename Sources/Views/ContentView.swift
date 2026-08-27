@@ -5,8 +5,9 @@ public struct ContentView: View {
     @State private var selectedPhotoItem: PhotosPickerItem? = nil
     @State private var currentImageURL: URL? = nil
     
-    // Imagens base e máscaras semânticas em memória
     @State private var cachedPreviewCIImage: CIImage? = nil
+    @State private var cachedGainMap: CIImage? = nil
+    @State private var cachedGainMapHeadroom: Float = 4.0
     @State private var loadedMattes: SemanticMattes = SemanticMattes()
     @State private var originalPreviewUI: UIImage? = nil
     @State private var enhancedPreviewUI: UIImage? = nil
@@ -15,6 +16,7 @@ public struct ContentView: View {
     @State private var isSaving: Bool = false
     @State private var showSavedAlert: Bool = false
     @State private var alertMessage: String = ""
+    @State private var hasGainMap: Bool = false
     
     @State private var settings: EnhancementSettings = .default
     @State private var selectedPreset: String = "Sony A7 Pro"
@@ -27,7 +29,6 @@ public struct ContentView: View {
                 Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // ÁREA PRINCIPAL DE PREVIEW COM SLIDER ANTES / DEPOIS
                     if let original = originalPreviewUI, let enhanced = enhancedPreviewUI {
                         BeforeAfterView(originalImage: original, enhancedImage: enhanced)
                             .frame(maxWidth: .infinity)
@@ -38,7 +39,7 @@ public struct ContentView: View {
                         VStack(spacing: 12) {
                             ProgressView()
                                 .scaleEffect(1.5)
-                            Text("Carregando ProRAW...")
+                            Text("Carregando ProRAW e Gain Map HDR...")
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(.secondary)
                         }
@@ -52,10 +53,13 @@ public struct ContentView: View {
                         emptyStatePlaceholder
                     }
                     
-                    // CONTROLES E SLIDERS
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 20) {
                             if cachedPreviewCIImage != nil {
+                                // Badge HDR
+                                if hasGainMap {
+                                    hdrGainMapBadge
+                                }
                                 presetSelectorSection
                                 neuralEngineSection
                                 semanticRetouchSection
@@ -65,7 +69,6 @@ public struct ContentView: View {
                         .padding(16)
                     }
                     
-                    // BARRA INFERIOR DE EXPORTAÇÃO
                     bottomActionBar
                 }
             }
@@ -97,6 +100,25 @@ public struct ContentView: View {
     
     // MARK: - Subviews
     
+    private var hdrGainMapBadge: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "sun.max.trianglebadge.exclamationmark.fill")
+                .foregroundColor(.yellow)
+                .font(.system(size: 14))
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Gain Map HDR detectado")
+                    .font(.system(size: 13, weight: .bold))
+                Text("A foto será salva em HEIF com HDR preservado (1000 nits XDR)")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+        }
+        .padding(12)
+        .background(Color.yellow.opacity(0.12))
+        .cornerRadius(12)
+    }
+    
     private var emptyStatePlaceholder: some View {
         VStack(spacing: 16) {
             Image(systemName: "camera.aperture")
@@ -107,7 +129,7 @@ public struct ContentView: View {
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundColor(.primary)
             
-            Text("Compatível com Apple ProRAW (.DNG) ou fotos normais")
+            Text("Compatível com Apple ProRAW (.DNG) — HDR + Gain Map preservados na saída HEIF")
                 .font(.system(size: 13))
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -139,57 +161,24 @@ public struct ContentView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     presetButton(title: "Sony A7 Pro", icon: "sparkles", preset: EnhancementSettings(
-                        microContrast: 0.35,
-                        toneDepth: 0.35,
-                        highlightRollOff: 0.70,
-                        shadowRichness: 0.15,
-                        opticalGrain: 0.0,
-                        colorVibrance: 0.12,
-                        enableNeuralEngine: true,
-                        neuralTextureDetail: 0.85,
-                        enableSemanticRetouch: true,
-                        hairDetailBoost: 0.45,
-                        skinSmoothing: 0.25,
-                        skyEnhancement: 0.30,
-                        teethBrightening: 0.25,
-                        glassesClarity: 0.30,
-                        opticalBokehDepth: 0.0
-                    ))
+                        microContrast: 0.35, toneDepth: 0.35, highlightRollOff: 0.70, shadowRichness: 0.15,
+                        opticalGrain: 0.0, colorVibrance: 0.12, enableNeuralEngine: true,
+                        neuralTextureDetail: 0.85, enableSemanticRetouch: true, hairDetailBoost: 0.45,
+                        skinSmoothing: 0.25, skyEnhancement: 0.30, teethBrightening: 0.25,
+                        glassesClarity: 0.30, opticalBokehDepth: 0.0))
                     presetButton(title: "Leica Natural", icon: "circle.circle", preset: .default)
                     presetButton(title: "Arri Cinema", icon: "film", preset: EnhancementSettings(
-                        microContrast: 0.25,
-                        toneDepth: 0.50,
-                        highlightRollOff: 0.85,
-                        shadowRichness: 0.25,
-                        opticalGrain: 0.0,
-                        colorVibrance: 0.08,
-                        enableNeuralEngine: true,
-                        neuralTextureDetail: 0.70,
-                        enableSemanticRetouch: true,
-                        hairDetailBoost: 0.35,
-                        skinSmoothing: 0.35,
-                        skyEnhancement: 0.35,
-                        teethBrightening: 0.20,
-                        glassesClarity: 0.20,
-                        opticalBokehDepth: 0.0
-                    ))
+                        microContrast: 0.25, toneDepth: 0.50, highlightRollOff: 0.85, shadowRichness: 0.25,
+                        opticalGrain: 0.0, colorVibrance: 0.08, enableNeuralEngine: true,
+                        neuralTextureDetail: 0.70, enableSemanticRetouch: true, hairDetailBoost: 0.35,
+                        skinSmoothing: 0.35, skyEnhancement: 0.35, teethBrightening: 0.20,
+                        glassesClarity: 0.20, opticalBokehDepth: 0.0))
                     presetButton(title: "Pure Sensor", icon: "camera.filters", preset: EnhancementSettings(
-                        microContrast: 0.0,
-                        toneDepth: 0.10,
-                        highlightRollOff: 0.20,
-                        shadowRichness: 0.0,
-                        opticalGrain: 0.0,
-                        colorVibrance: 0.0,
-                        enableNeuralEngine: false,
-                        neuralTextureDetail: 0.0,
-                        enableSemanticRetouch: false,
-                        hairDetailBoost: 0.0,
-                        skinSmoothing: 0.0,
-                        skyEnhancement: 0.0,
-                        teethBrightening: 0.0,
-                        glassesClarity: 0.0,
-                        opticalBokehDepth: 0.0
-                    ))
+                        microContrast: 0.0, toneDepth: 0.10, highlightRollOff: 0.20, shadowRichness: 0.0,
+                        opticalGrain: 0.0, colorVibrance: 0.0, enableNeuralEngine: false,
+                        neuralTextureDetail: 0.0, enableSemanticRetouch: false, hairDetailBoost: 0.0,
+                        skinSmoothing: 0.0, skyEnhancement: 0.0, teethBrightening: 0.0,
+                        glassesClarity: 0.0, opticalBokehDepth: 0.0))
                 }
             }
         }
@@ -197,24 +186,17 @@ public struct ContentView: View {
     
     private func presetButton(title: String, icon: String, preset: EnhancementSettings) -> some View {
         let isSelected = selectedPreset == title
-        return Button(action: {
-            selectedPreset = title
-            settings = preset
-        }) {
+        return Button(action: { selectedPreset = title; settings = preset }) {
             HStack(spacing: 6) {
                 Image(systemName: icon)
-                Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                Text(title).font(.system(size: 13, weight: .semibold))
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .background(isSelected ? Color.accentColor : Color(uiColor: .secondarySystemGroupedBackground))
             .foregroundColor(isSelected ? .white : .primary)
             .cornerRadius(20)
-            .overlay(
-                RoundedRectangle(cornerRadius: 20)
-                    .stroke(Color.gray.opacity(0.2), lineWidth: isSelected ? 0 : 1)
-            )
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.gray.opacity(0.2), lineWidth: isSelected ? 0 : 1))
         }
     }
     
@@ -222,18 +204,13 @@ public struct ContentView: View {
         VStack(spacing: 12) {
             Toggle(isOn: $settings.enableNeuralEngine) {
                 HStack(spacing: 8) {
-                    Image(systemName: "cpu.fill")
-                        .foregroundColor(.yellow)
+                    Image(systemName: "cpu.fill").foregroundColor(.yellow)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Apple Neural Engine (IA)")
-                            .font(.system(size: 14, weight: .bold))
-                        Text("Reconstrução profunda de textura no salvamento")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
+                        Text("Apple Neural Engine (IA)").font(.system(size: 14, weight: .bold))
+                        Text("Reconstrução profunda de textura no salvamento").font(.system(size: 11)).foregroundColor(.secondary)
                     }
                 }
-            }
-            .tint(.accentColor)
+            }.tint(.accentColor)
             
             if settings.enableNeuralEngine {
                 sliderRow(title: "Intensidade da Textura Neural", value: $settings.neuralTextureDetail, range: 0.0...1.0, icon: "sparkles")
@@ -248,18 +225,13 @@ public struct ContentView: View {
         VStack(alignment: .leading, spacing: 12) {
             Toggle(isOn: $settings.enableSemanticRetouch) {
                 HStack(spacing: 8) {
-                    Image(systemName: "person.crop.circle.badge.checkmark")
-                        .foregroundColor(.green)
+                    Image(systemName: "person.crop.circle.badge.checkmark").foregroundColor(.green)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Retoque Semântico ProRAW")
-                            .font(.system(size: 14, weight: .bold))
-                        Text("Tratamento cirúrgico em 6 canais de IA")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
+                        Text("Retoque Semântico ProRAW").font(.system(size: 14, weight: .bold))
+                        Text("Tratamento cirúrgico em 6 canais de IA").font(.system(size: 11)).foregroundColor(.secondary)
                     }
                 }
-            }
-            .tint(.accentColor)
+            }.tint(.accentColor)
             
             if settings.enableSemanticRetouch {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -271,8 +243,7 @@ public struct ContentView: View {
                         matteBadge(title: "Óculos", detected: loadedMattes.glasses != nil)
                         matteBadge(title: "Profundidade", detected: loadedMattes.depth != nil)
                     }
-                }
-                .padding(.vertical, 2)
+                }.padding(.vertical, 2)
                 
                 sliderRow(title: "Nitidez em Cabelos & Barba", value: $settings.hairDetailBoost, range: 0.0...1.0, icon: "comb.fill")
                 sliderRow(title: "Retoque Orgânico de Pele", value: $settings.skinSmoothing, range: 0.0...1.0, icon: "face.smiling.inverse")
@@ -289,15 +260,10 @@ public struct ContentView: View {
     
     private func matteBadge(title: String, detected: Bool) -> some View {
         HStack(spacing: 4) {
-            Circle()
-                .fill(detected ? Color.green : Color.gray.opacity(0.4))
-                .frame(width: 6, height: 6)
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(detected ? .primary : .secondary)
+            Circle().fill(detected ? Color.green : Color.gray.opacity(0.4)).frame(width: 6, height: 6)
+            Text(title).font(.system(size: 11, weight: .semibold)).foregroundColor(detected ? .primary : .secondary)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 8).padding(.vertical, 4)
         .background(Color(uiColor: .tertiarySystemGroupedBackground))
         .cornerRadius(8)
     }
@@ -319,15 +285,12 @@ public struct ContentView: View {
     private func sliderRow(title: String, value: Binding<Float>, range: ClosedRange<Float>, icon: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Label(title, systemImage: icon)
-                    .font(.system(size: 13, weight: .medium))
+                Label(title, systemImage: icon).font(.system(size: 13, weight: .medium))
                 Spacer()
                 Text(String(format: "%.0f%%", value.wrappedValue * 100))
-                    .font(.system(size: 12, weight: .bold, design: .monospaced))
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 12, weight: .bold, design: .monospaced)).foregroundColor(.secondary)
             }
-            Slider(value: value, in: range)
-                .tint(.accentColor)
+            Slider(value: value, in: range).tint(.accentColor)
         }
     }
     
@@ -339,42 +302,35 @@ public struct ContentView: View {
                     Text("Outra Foto")
                 }
                 .font(.system(size: 15, weight: .semibold))
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
+                .frame(maxWidth: .infinity).frame(height: 50)
                 .background(Color(uiColor: .secondarySystemGroupedBackground))
-                .foregroundColor(.primary)
-                .cornerRadius(14)
+                .foregroundColor(.primary).cornerRadius(14)
             }
             
             if cachedPreviewCIImage != nil {
                 Button(action: saveFullResolutionImage) {
                     HStack {
                         if isSaving {
-                            ProgressView()
-                                .tint(.white)
-                                .padding(.trailing, 4)
+                            ProgressView().tint(.white).padding(.trailing, 4)
                             Text("Processando IA...")
                         } else {
-                            Image(systemName: "sparkles")
-                            Text("Salvar Foto (IA)")
+                            Image(systemName: hasGainMap ? "sun.max.fill" : "sparkles")
+                            Text(hasGainMap ? "Salvar HEIF HDR" : "Salvar Foto (IA)")
                         }
                     }
                     .font(.system(size: 15, weight: .bold))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(Color.accentColor)
-                    .foregroundColor(.white)
-                    .cornerRadius(14)
+                    .frame(maxWidth: .infinity).frame(height: 50)
+                    .background(hasGainMap ? Color.orange : Color.accentColor)
+                    .foregroundColor(.white).cornerRadius(14)
                 }
                 .disabled(isSaving)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 16).padding(.vertical, 12)
         .background(.ultraThinMaterial)
     }
     
-    // MARK: - Core Processing Logic
+    // MARK: - Logic
     
     private func resetToDefault() {
         selectedPreset = "Sony A7 Pro"
@@ -389,16 +345,12 @@ public struct ContentView: View {
             DispatchQueue.main.async {
                 switch result {
                 case .success(let data):
-                    guard let data = data else {
-                        self.isProcessing = false
-                        return
-                    }
+                    guard let data = data else { self.isProcessing = false; return }
                     
                     let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("current_edit_input.dng")
                     try? data.write(to: tempURL)
                     self.currentImageURL = tempURL
                     
-                    // Carrega a imagem e extrai todos os mapas semânticos em 16-bit
                     DispatchQueue.global(qos: .userInteractive).async {
                         if let loaded = ProRAWProcessor.shared.loadCIImage(from: tempURL, maxDimension: 1200) {
                             let origUI = ProRAWProcessor.shared.renderUIImage(from: loaded.original)
@@ -406,16 +358,15 @@ public struct ContentView: View {
                             
                             DispatchQueue.main.async {
                                 self.cachedPreviewCIImage = loaded.cleanRaw
+                                self.cachedGainMap = loaded.gainMap
+                                self.cachedGainMapHeadroom = loaded.gainMapHeadroom
                                 self.loadedMattes = loaded.mattes
+                                self.hasGainMap = loaded.gainMap != nil
                                 self.originalPreviewUI = origUI
                                 self.enhancedPreviewUI = enhUI
                                 self.isProcessing = false
                             }
-                        } else {
-                            DispatchQueue.main.async {
-                                self.isProcessing = false
-                            }
-                        }
+                        } else { DispatchQueue.main.async { self.isProcessing = false } }
                     }
                     
                 case .failure(let error):
@@ -428,12 +379,9 @@ public struct ContentView: View {
     
     private func updateLivePreview() {
         guard let baseCI = cachedPreviewCIImage else { return }
-        
         DispatchQueue.global(qos: .userInteractive).async {
             let rendered = ProRAWProcessor.shared.process(inputImage: baseCI, mattes: self.loadedMattes, settings: self.settings, isDraft: true)
-            DispatchQueue.main.async {
-                self.enhancedPreviewUI = rendered
-            }
+            DispatchQueue.main.async { self.enhancedPreviewUI = rendered }
         }
     }
     
@@ -442,27 +390,42 @@ public struct ContentView: View {
         isSaving = true
         
         DispatchQueue.global(qos: .userInitiated).async {
-            // Executa a Rede Neural Completa no Apple Neural Engine com FORÇA TOTAL
-            if let fullResData = ProRAWProcessor.shared.loadCIImage(from: url, maxDimension: nil),
-               let fullResExport = ProRAWProcessor.shared.process(inputImage: fullResData.cleanRaw, mattes: fullResData.mattes, settings: self.settings, isDraft: false) {
-                
-                PhotoManager.shared.saveToPhotoLibrary(image: fullResExport) { success, error in
+            guard let fullResData = ProRAWProcessor.shared.loadCIImage(from: url, maxDimension: nil) else {
+                DispatchQueue.main.async { self.isSaving = false; self.alertMessage = "Não foi possível carregar o arquivo original."; self.showSavedAlert = true }
+                return
+            }
+            
+            let processedPhoto = ProRAWProcessor.shared.processForExport(
+                inputImage: fullResData.cleanRaw,
+                gainMap: fullResData.gainMap,
+                gainMapHeadroom: fullResData.gainMapHeadroom,
+                mattes: fullResData.mattes,
+                settings: self.settings
+            )
+            
+            // Se tem Gain Map: salva como HEIF HDR com Gain Map embutido
+            if #available(iOS 17.0, *), let heifData = ProRAWProcessor.shared.renderHEIFWithGainMap(from: processedPhoto) {
+                PhotoManager.shared.saveHEIFWithGainMap(heifData: heifData) { success, error in
                     DispatchQueue.main.async {
                         self.isSaving = false
-                        if success {
-                            self.alertMessage = "Foto restaurada no Apple Neural Engine e salva com sucesso!"
-                            self.showSavedAlert = true
-                        } else {
-                            self.alertMessage = "Erro ao salvar: \(error?.localizedDescription ?? "Permissão negada.")"
-                            self.showSavedAlert = true
-                        }
+                        self.alertMessage = success
+                            ? "Foto salva em HEIF HDR com Gain Map preservado! Visualize no iPhone com a tela XDR para ver os 1000 nits."
+                            : "Erro ao salvar: \(error?.localizedDescription ?? "Desconhecido")"
+                        self.showSavedAlert = true
                     }
                 }
             } else {
-                DispatchQueue.main.async {
-                    self.isSaving = false
-                    self.alertMessage = "Não foi possível renderizar a imagem em alta resolução."
-                    self.showSavedAlert = true
+                // Fallback JPEG (sem Gain Map) para fotos sem HDR
+                guard let uiImage = ProRAWProcessor.shared.process(inputImage: fullResData.cleanRaw, mattes: fullResData.mattes, settings: self.settings, isDraft: false) else {
+                    DispatchQueue.main.async { self.isSaving = false; self.alertMessage = "Erro ao renderizar a imagem."; self.showSavedAlert = true }
+                    return
+                }
+                PhotoManager.shared.saveToPhotoLibrary(image: uiImage) { success, error in
+                    DispatchQueue.main.async {
+                        self.isSaving = false
+                        self.alertMessage = success ? "Foto processada e salva com sucesso!" : "Erro ao salvar: \(error?.localizedDescription ?? "Desconhecido")"
+                        self.showSavedAlert = true
+                    }
                 }
             }
         }
