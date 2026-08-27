@@ -1,0 +1,30 @@
+workflows:
+  ios-app:
+    name: Build ProRAW Studio IPA
+    max_build_duration: 30
+    instance_type: mac_mini_m1
+    environment:
+      xcode: latest
+    scripts:
+      - name: Install XcodeGen
+        script: |
+          brew install xcodegen
+      - name: Generate Xcode Project
+        script: |
+          xcodegen generate
+      - name: Build and Package IPA
+        script: |
+          xcodebuild -project ProRawEnhancer.xcodeproj \
+            -scheme ProRawEnhancer \
+            -sdk iphoneos \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            clean build
+          mkdir -p Payload
+          cp -r build/Build/Products/Release-iphoneos/ProRawEnhancer.app Payload/
+          zip -r ProRawEnhancer.ipa Payload
+    artifacts:
+      - ProRawEnhancer.ipa
