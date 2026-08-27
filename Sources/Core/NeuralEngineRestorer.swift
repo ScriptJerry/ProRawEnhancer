@@ -5,7 +5,7 @@ import CoreML
 import Vision
 import UIKit
 
-/// Motor Neural Real com Modelo de Deep Learning no Apple Neural Engine (ANE)
+/// Motor Neural com Suporte a Dimensões Nativas Dinâmicas (Zero Distorção / Zero Letterbox)
 public final class NeuralEngineRestorer {
     public static let shared = NeuralEngineRestorer()
     
@@ -18,9 +18,8 @@ public final class NeuralEngineRestorer {
     
     private func setupCoreMLModel() {
         let config = MLModelConfiguration()
-        config.computeUnits = .all // Prioriza o Apple Neural Engine (16 núcleos A16 Bionic) + GPU
+        config.computeUnits = .all // Prioriza o Apple Neural Engine (ANE)
         
-        // 1. Tenta carregar o modelo compilado do bundle
         if let modelURL = Bundle.main.url(forResource: "ProTextureNeuralNet", withExtension: "mlmodelc"),
            let model = try? MLModel(contentsOf: modelURL, configuration: config) {
             self.mlModel = model
@@ -33,16 +32,26 @@ public final class NeuralEngineRestorer {
         }
     }
     
-    /// Executa a restauração profunda de textura usando a Rede Neural no Neural Engine
-    public func enhanceTexture(ciImage: CIImage, intensity: Float = 0.65) -> CIImage {
+    /// PREVIEW AO VIVO (60 FPS): Resposta instantânea na tela
+    public func quickPreviewAcutance(ciImage: CIImage, intensity: Float = 0.65) -> CIImage {
+        guard intensity > 0.01 else { return ciImage }
+        let clamped = ciImage.clampedToExtent()
+        return clamped.applyingFilter("CIUnsharpMask", parameters: [
+            kCIInputRadiusKey: 0.85,
+            kCIInputIntensityKey: intensity * 0.45
+        ]).cropped(to: ciImage.extent)
+    }
+    
+    /// EXPORTAÇÃO FINAL (FORÇA TOTAL): Rede Neural Nativa no Apple Neural Engine
+    public func enhanceTexture(ciImage: CIImage, intensity: Float = 0.75) -> CIImage {
         guard intensity > 0.01 else { return ciImage }
         
-        let extent = ciImage.extent
+        let targetExtent = ciImage.extent
         
-        // Execução no Apple Neural Engine via Vision
+        // Execução no Neural Engine via Vision com proporção nativa exata
         if let vnModel = self.vnModel {
             let request = VNCoreMLRequest(model: vnModel)
-            request.imageCropAndScaleOption = .scaleFit
+            request.imageCropAndScaleOption = .scaleFill // Preenchimento 1:1 sem letterboxing/barras pretas
             
             let handler = VNImageRequestHandler(ciImage: ciImage, options: [:])
             do {
@@ -51,11 +60,11 @@ public final class NeuralEngineRestorer {
                    let first = results.first {
                     
                     let neuralOutput = CIImage(cvPixelBuffer: first.pixelBuffer)
-                    let scaledOutput = matchScale(image: neuralOutput, targetExtent: extent)
+                    let alignedOutput = matchExactExtent(image: neuralOutput, targetExtent: targetExtent)
                     
-                    // Mistura a reconstrução neural com a imagem base de acordo com a intensidade
-                    let alphaMask = CIImage(color: CIColor(red: 1, green: 1, blue: 1, alpha: CGFloat(intensity))).cropped(to: extent)
-                    return scaledOutput.applyingFilter("CIBlendWithAlphaMask", parameters: [
+                    // Mistura perfeitamente alinhada
+                    let alphaMask = CIImage(color: CIColor(red: 1, green: 1, blue: 1, alpha: CGFloat(intensity))).cropped(to: targetExtent)
+                    return alignedOutput.applyingFilter("CIBlendWithAlphaMask", parameters: [
                         kCIInputBackgroundImageKey: ciImage,
                         kCIInputMaskImageKey: alphaMask
                     ])
@@ -65,15 +74,15 @@ public final class NeuralEngineRestorer {
             }
         }
         
-        // Fallback óptico suave
+        // Fallback óptico suave alinhado
         let clamped = ciImage.clampedToExtent()
         return clamped.applyingFilter("CIUnsharpMask", parameters: [
             kCIInputRadiusKey: 1.1,
-            kCIInputIntensityKey: intensity * 0.45
-        ]).cropped(to: extent)
+            kCIInputIntensityKey: intensity * 0.50
+        ]).cropped(to: targetExtent)
     }
     
-    private func matchScale(image: CIImage, targetExtent: CGRect) -> CIImage {
+    private func matchExactExtent(image: CIImage, targetExtent: CGRect) -> CIImage {
         let currentExtent = image.extent
         guard currentExtent.width > 0 && currentExtent.height > 0 else { return image }
         
