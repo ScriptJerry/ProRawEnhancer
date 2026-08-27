@@ -3,13 +3,17 @@ import PhotosUI
 
 public struct ContentView: View {
     @State private var selectedPhotoItem: PhotosPickerItem? = nil
-    @State private var selectedDNGURL: URL? = nil
+    @State private var currentImageURL: URL? = nil
     
-    @State private var originalPreview: UIImage? = nil
-    @State private var enhancedPreview: UIImage? = nil
+    // Imagens base em memória (CIImage para reprocessamento instantâneo em GPU)
+    @State private var cachedPreviewCIImage: CIImage? = nil
+    @State private var originalPreviewUI: UIImage? = nil
+    @State private var enhancedPreviewUI: UIImage? = nil
+    
     @State private var isProcessing: Bool = false
     @State private var isSaving: Bool = false
     @State private var showSavedAlert: Bool = false
+    @State private var alertMessage: String = ""
     
     @State private var settings: EnhancementSettings = .default
     @State private var selectedPreset: String = "Leica Natural"
@@ -22,29 +26,44 @@ public struct ContentView: View {
                 Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // ÁREA PRINCIPAL DE VISUALIZAÇÃO
-                    if let original = originalPreview, let enhanced = enhancedPreview {
+                    // ÁREA PRINCIPAL DE PREVIEW COM SLIDER ANTES / DEPOIS
+                    if let original = originalPreviewUI, let enhanced = enhancedPreviewUI {
                         BeforeAfterView(originalImage: original, enhancedImage: enhanced)
                             .frame(maxWidth: .infinity)
                             .frame(height: 380)
                             .padding(.horizontal, 16)
                             .padding(.top, 8)
+                    } else if isProcessing {
+                        VStack(spacing: 12) {
+                            ProgressView()
+                                .scaleEffect(1.5)
+                            Text("Carregando foto e calibrando sensor...")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 380)
+                        .background(Color(uiColor: .secondarySystemGroupedBackground))
+                        .cornerRadius(16)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
                     } else {
                         emptyStatePlaceholder
                     }
                     
-                    // CONTROLES E AJUSTES
+                    // CONTROLES E SLIDERS
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 20) {
-                            if selectedDNGURL != nil {
+                            if cachedPreviewCIImage != nil {
                                 presetSelectorSection
+                                neuralEngineSection
                                 adjustmentSlidersSection
                             }
                         }
                         .padding(16)
                     }
                     
-                    // BARRA DE AÇÕES INFERIOR
+                    // BARRA INFERIOR DE EXPORTAÇÃO
                     bottomActionBar
                 }
             }
@@ -52,7 +71,7 @@ public struct ContentView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    if selectedDNGURL != nil {
+                    if cachedPreviewCIImage != nil {
                         Button(action: resetToDefault) {
                             Text("Resetar")
                                 .font(.system(size: 14, weight: .medium))
@@ -60,16 +79,16 @@ public struct ContentView: View {
                     }
                 }
             }
-            .alert("Foto Salva com Sucesso!", isPresented: $showSavedAlert) {
+            .alert("Aviso", isPresented: $showSavedAlert) {
                 Button("OK", role: .cancel) { }
             } message: {
-                Text("A imagem com qualidade de câmera profissional foi salva na sua biblioteca de fotos.")
+                Text(alertMessage)
             }
             .onChange(of: selectedPhotoItem) { _ in
                 loadSelectedPhoto(selectedPhotoItem)
             }
             .onChange(of: settings) { _ in
-                reprocessPreview()
+                updateLivePreview()
             }
         }
     }
@@ -82,8 +101,12 @@ public struct ContentView: View {
                 .font(.system(size: 56))
                 .foregroundColor(.secondary)
             
-            Text("Selecione uma foto Apple ProRAW (.DNG)")
-                .font(.system(size: 16, weight: .medium))
+            Text("Selecione uma foto da sua galeria")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundColor(.primary)
+            
+            Text("Compatível com Apple ProRAW (.DNG) ou fotos normais")
+                .font(.system(size: 13))
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
             
@@ -115,28 +138,34 @@ public struct ContentView: View {
                 HStack(spacing: 12) {
                     presetButton(title: "Leica Natural", icon: "circle.circle", preset: .default)
                     presetButton(title: "Sony A7 Pro", icon: "sparkles", preset: EnhancementSettings(
-                        microContrast: 0.65,
+                        microContrast: 0.75,
                         toneDepth: 0.45,
-                        highlightRollOff: 0.8,
+                        highlightRollOff: 0.85,
                         shadowRichness: 0.2,
                         opticalGrain: 0.05,
-                        colorVibrance: 0.1
+                        colorVibrance: 0.15,
+                        enableNeuralEngine: true,
+                        neuralTextureDetail: 0.80
                     ))
                     presetButton(title: "Arri Cinema", icon: "film", preset: EnhancementSettings(
                         microContrast: 0.4,
-                        toneDepth: 0.7,
+                        toneDepth: 0.8,
                         highlightRollOff: 0.95,
-                        shadowRichness: 0.4,
-                        opticalGrain: 0.35,
-                        colorVibrance: 0.05
+                        shadowRichness: 0.45,
+                        opticalGrain: 0.25,
+                        colorVibrance: 0.05,
+                        enableNeuralEngine: true,
+                        neuralTextureDetail: 0.60
                     ))
                     presetButton(title: "Pure Sensor", icon: "camera.filters", preset: EnhancementSettings(
-                        microContrast: 0.2,
-                        toneDepth: 0.3,
-                        highlightRollOff: 0.5,
-                        shadowRichness: 0.1,
+                        microContrast: 0.1,
+                        toneDepth: 0.2,
+                        highlightRollOff: 0.4,
+                        shadowRichness: 0.0,
                         opticalGrain: 0.0,
-                        colorVibrance: 0.0
+                        colorVibrance: 0.0,
+                        enableNeuralEngine: false,
+                        neuralTextureDetail: 0.0
                     ))
                 }
             }
@@ -166,13 +195,40 @@ public struct ContentView: View {
         }
     }
     
+    private var neuralEngineSection: some View {
+        VStack(spacing: 12) {
+            Toggle(isOn: $settings.enableNeuralEngine) {
+                HStack(spacing: 8) {
+                    Image(systemName: "cpu.fill")
+                        .foregroundColor(.yellow)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Apple Neural Engine (IA)")
+                            .font(.system(size: 14, weight: .bold))
+                        Text("Restauração profunda de textura em alta resolução")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .tint(.accentColor)
+            
+            if settings.enableNeuralEngine {
+                sliderRow(title: "Intensidade da Reconstrução Neural", value: $settings.neuralTextureDetail, range: 0.0...1.0, icon: "sparkles")
+            }
+        }
+        .padding(16)
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .cornerRadius(16)
+    }
+    
     private var adjustmentSlidersSection: some View {
         VStack(spacing: 16) {
             sliderRow(title: "Micro-Contraste Óptico", value: $settings.microContrast, range: 0.0...1.0, icon: "scope")
             sliderRow(title: "Highlight Roll-Off (Luzes)", value: $settings.highlightRollOff, range: 0.0...1.0, icon: "sun.max")
             sliderRow(title: "Profundidade Tonal (Curva S)", value: $settings.toneDepth, range: 0.0...1.0, icon: "slider.vertical.3")
             sliderRow(title: "Riqueza de Sombras", value: $settings.shadowRichness, range: 0.0...1.0, icon: "moon.fill")
-            sliderRow(title: "Grão Analógico de Sensor", value: $settings.opticalGrain, range: 0.0...1.0, icon: "circle.grid.3x3.fill")
+            sliderRow(title: "Vibração de Cor (P3)", value: $settings.colorVibrance, range: 0.0...0.5, icon: "paintpalette.fill")
+            sliderRow(title: "Grão de Sensor (Filme)", value: $settings.opticalGrain, range: 0.0...0.5, icon: "circle.grid.3x3.fill")
         }
         .padding(16)
         .background(Color(uiColor: .secondarySystemGroupedBackground))
@@ -209,15 +265,17 @@ public struct ContentView: View {
                 .cornerRadius(14)
             }
             
-            if selectedDNGURL != nil {
+            if cachedPreviewCIImage != nil {
                 Button(action: saveFullResolutionImage) {
                     HStack {
                         if isSaving {
                             ProgressView()
                                 .tint(.white)
+                                .padding(.trailing, 4)
+                            Text("Processando IA...")
                         } else {
-                            Image(systemName: "square.and.arrow.down.fill")
-                            Text("Salvar em Alta")
+                            Image(systemName: "sparkles")
+                            Text("Salvar Foto (IA)")
                         }
                     }
                     .font(.system(size: 15, weight: .bold))
@@ -235,7 +293,7 @@ public struct ContentView: View {
         .background(.ultraThinMaterial)
     }
     
-    // MARK: - Processing Logic
+    // MARK: - Core Processing Logic
     
     private func resetToDefault() {
         selectedPreset = "Leica Natural"
@@ -250,14 +308,33 @@ public struct ContentView: View {
             DispatchQueue.main.async {
                 switch result {
                 case .success(let data):
-                    guard let data = data else { return }
+                    guard let data = data else {
+                        self.isProcessing = false
+                        return
+                    }
                     
-                    // Salva temporariamente em arquivo para o CIRAWFilter ler
-                    let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("temp_input.dng")
+                    let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("current_edit_input.dng")
                     try? data.write(to: tempURL)
+                    self.currentImageURL = tempURL
                     
-                    self.selectedDNGURL = tempURL
-                    self.reprocessPreview()
+                    // Carrega a imagem otimizada para o preview em tempo real (1200px máx para 60fps)
+                    DispatchQueue.global(qos: .userInteractive).async {
+                        if let images = ProRAWProcessor.shared.loadCIImage(from: tempURL, maxDimension: 1200) {
+                            let origUI = ProRAWProcessor.shared.renderUIImage(from: images.original)
+                            let enhUI = ProRAWProcessor.shared.process(inputImage: images.cleanRaw, settings: self.settings, isDraft: true)
+                            
+                            DispatchQueue.main.async {
+                                self.cachedPreviewCIImage = images.cleanRaw
+                                self.originalPreviewUI = origUI
+                                self.enhancedPreviewUI = enhUI
+                                self.isProcessing = false
+                            }
+                        } else {
+                            DispatchQueue.main.async {
+                                self.isProcessing = false
+                            }
+                        }
+                    }
                     
                 case .failure(let error):
                     print("Erro ao carregar foto: \(error)")
@@ -267,33 +344,34 @@ public struct ContentView: View {
         }
     }
     
-    private func reprocessPreview() {
-        guard let url = selectedDNGURL else { return }
+    private func updateLivePreview() {
+        guard let baseCI = cachedPreviewCIImage else { return }
         
         DispatchQueue.global(qos: .userInteractive).async {
-            // Renderiza preview em draft mode para velocidade instantânea
-            let orig = ProRAWProcessor.shared.getOriginalRaw(dngURL: url, isDraft: true)
-            let enh = ProRAWProcessor.shared.process(dngURL: url, settings: self.settings, isDraft: true)
-            
+            let rendered = ProRAWProcessor.shared.process(inputImage: baseCI, settings: self.settings, isDraft: true)
             DispatchQueue.main.async {
-                self.originalPreview = orig
-                self.enhancedPreview = enh
-                self.isProcessing = false
+                self.enhancedPreviewUI = rendered
             }
         }
     }
     
     private func saveFullResolutionImage() {
-        guard let url = selectedDNGURL else { return }
+        guard let url = currentImageURL else { return }
         isSaving = true
         
         DispatchQueue.global(qos: .userInitiated).async {
-            // Renderiza na resolução máxima (48MP/24MP/12MP nativo)
-            if let fullResImage = ProRAWProcessor.shared.process(dngURL: url, settings: self.settings, isDraft: false) {
-                PhotoManager.shared.saveToPhotoLibrary(image: fullResImage) { success, error in
+            // Carrega em resolução máxima nativa (sem redução de escala)
+            if let fullResImages = ProRAWProcessor.shared.loadCIImage(from: url, maxDimension: nil),
+               let fullResExport = ProRAWProcessor.shared.process(inputImage: fullResImages.cleanRaw, settings: self.settings, isDraft: false) {
+                
+                PhotoManager.shared.saveToPhotoLibrary(image: fullResExport) { success, error in
                     DispatchQueue.main.async {
                         self.isSaving = false
                         if success {
+                            self.alertMessage = "Foto processada com o Apple Neural Engine e salva com sucesso!"
+                            self.showSavedAlert = true
+                        } else {
+                            self.alertMessage = "Erro ao salvar: \(error?.localizedDescription ?? "Permissão negada.")"
                             self.showSavedAlert = true
                         }
                     }
@@ -301,6 +379,8 @@ public struct ContentView: View {
             } else {
                 DispatchQueue.main.async {
                     self.isSaving = false
+                    self.alertMessage = "Não foi possível renderizar a imagem em alta resolução."
+                    self.showSavedAlert = true
                 }
             }
         }

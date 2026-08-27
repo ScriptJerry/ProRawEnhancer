@@ -2,32 +2,29 @@ import Foundation
 import UIKit
 import Photos
 
-public final class PhotoManager: ObservableObject {
+public final class PhotoManager: NSObject, ObservableObject {
     public static let shared = PhotoManager()
     
-    @Published public var isSaving: Bool = false
-    @Published public var saveSuccess: Bool = false
-    @Published public var errorMessage: String? = nil
+    private var saveCompletion: ((Bool, Error?) -> Void)?
     
-    private init() {}
+    private override init() {
+        super.init()
+    }
     
-    /// Salva a imagem processada diretamente no rolo da câmera com máxima fidelidade
+    /// Salva a imagem diretamente no rolo da câmera com confirmação garantida
     public func saveToPhotoLibrary(image: UIImage, completion: @escaping (Bool, Error?) -> Void) {
-        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
-            guard status == .authorized || status == .limited else {
-                DispatchQueue.main.async {
-                    completion(false, NSError(domain: "PhotoManager", code: 1, userInfo: [NSLocalizedDescriptionKey: "Permissão de acesso à galeria negada."]))
-                }
-                return
+        self.saveCompletion = completion
+        UIImageWriteToSavedPhotosAlbum(image, self, #selector(image(_:didFinishSavingWithError:contextInfo:)), nil)
+    }
+    
+    @objc private func image(_ image: UIImage, didFinishSavingWithError error: Error?, contextInfo: UnsafeRawPointer) {
+        DispatchQueue.main.async {
+            if let error = error {
+                self.saveCompletion?(false, error)
+            } else {
+                self.saveCompletion?(true, nil)
             }
-            
-            PHPhotoLibrary.shared().performChanges({
-                PHAssetChangeRequest.creationRequestForAsset(from: image)
-            }) { success, error in
-                DispatchQueue.main.async {
-                    completion(success, error)
-                }
-            }
+            self.saveCompletion = nil
         }
     }
 }
