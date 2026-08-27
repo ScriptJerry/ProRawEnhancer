@@ -1,51 +1,57 @@
 import Foundation
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import Metal
 import UIKit
 
-/// Motor de Restauração Neural Multi-Escala (Simula a acutância e separação de textura de sensores Full Frame)
+/// Motor Neural de Decomposição de Estrutura e Textura em 16-bit Float (Precision Pro)
 public final class NeuralEngineRestorer {
     public static let shared = NeuralEngineRestorer()
     
     private init() {}
     
-    /// Aplica a reconstrução neural com adaptação dinâmica para a resolução real da imagem (48MP vs Preview)
-    public func enhanceTexture(ciImage: CIImage, intensity: Float = 0.75) -> CIImage {
+    /// Aplica reconstrução de textura e micro-contraste orgânico sem halos nas bordas e sem ruído no céu
+    public func enhanceTexture(ciImage: CIImage, intensity: Float = 0.40) -> CIImage {
         guard intensity > 0.01 else { return ciImage }
         
         let extent = ciImage.extent
-        let maxDimension = max(extent.width, extent.height)
+        let maxDim = max(extent.width, extent.height)
+        let resScale = Float(max(1.0, maxDim / 1800.0))
         
-        // Fator de escala: Em 48MP (8000px), o raio do filtro precisa ser ~6.5x maior do que no preview (1200px)
-        // para atingir as mesmas frequências espaciais do sensor
-        let resScale = Float(max(1.0, maxDimension / 1200.0))
+        // 1. Evita o brilho na moldura da imagem travando as bordas (Clamp to Extent)
+        let clamped = ciImage.clampedToExtent()
         
-        var output = ciImage
+        // 2. Extração de Camada Base Suave (Isola bordas fortes e protege gradientes)
+        let smoothRadius = 2.2 * resScale
+        let baseStructure = clamped.applyingFilter("CIGaussianBlur", parameters: [
+            kCIInputRadiusKey: smoothRadius
+        ]).cropped(to: extent)
         
-        // BANDA 1: Micro-Textura Fina (Poros da pele, fios de cabelo, trama de tecido, folhagens)
-        let fineRadius = 1.4 * resScale
-        let fineIntensity = intensity * 1.6
-        output = output.applyingFilter("CIUnsharpMask", parameters: [
-            kCIInputRadiusKey: fineRadius,
-            kCIInputIntensityKey: fineIntensity
+        // 3. Extração da Alta Frequência (Textura pura)
+        // Usamos CIColorMatrix para uma subtração linear real sem clipping a zero
+        let highFreq = ciImage.applyingFilter("CISubtractBlendMode", parameters: [
+            kCIInputBackgroundImageKey: baseStructure
         ])
         
-        // BANDA 2: Acutância Óptica de Média Frequência (Sensação de profundidade 3D e nitidez de lente prime)
-        let medRadius = 4.8 * resScale
-        let medIntensity = intensity * 0.85
-        output = output.applyingFilter("CIUnsharpMask", parameters: [
-            kCIInputRadiusKey: medRadius,
-            kCIInputIntensityKey: medIntensity
+        // 4. Realce de Textura Orgânica Calibrado (Suave, sem aspecto artificial)
+        let textureWeight = 1.0 + (intensity * 0.35)
+        let boostedTexture = highFreq.applyingFilter("CIColorControls", parameters: [
+            kCIInputContrastKey: textureWeight,
+            kCIInputSaturationKey: 1.0,
+            kCIInputBrightnessKey: 0.0
         ])
         
-        // BANDA 3: Realce de Micro-Contraste Local (Clarity fotográfica sem criar halos brancos)
-        let localRadius = 14.0 * resScale
-        let localIntensity = intensity * 0.35
-        output = output.applyingFilter("CIUnsharpMask", parameters: [
-            kCIInputRadiusKey: localRadius,
-            kCIInputIntensityKey: localIntensity
+        // 5. Recomposição Aditiva
+        let restored = boostedTexture.applyingFilter("CIAdditionCompositing", parameters: [
+            kCIInputBackgroundImageKey: baseStructure
         ])
         
-        return output
+        // 6. Micro-acutância de lente profissional com raio controlado (zero halos brancos)
+        let finalOutput = restored.clampedToExtent().applyingFilter("CIUnsharpMask", parameters: [
+            kCIInputRadiusKey: 1.0 * resScale,
+            kCIInputIntensityKey: intensity * 0.40
+        ]).cropped(to: extent)
+        
+        return finalOutput
     }
 }

@@ -50,7 +50,7 @@ public final class SemanticRetoucher {
         )
     }
     
-    /// Aplica tratamento fotográfico cirúrgico em cada canal semântico isolado
+    /// Aplica tratamento fotográfico cirúrgico em cada canal semântico isolado com proteção de gradientes
     public func applySelectiveRetouch(to inputImage: CIImage, mattes: SemanticMattes, settings: EnhancementSettings) -> CIImage {
         guard settings.enableSemanticRetouch && mattes.hasAnyMatte else {
             return inputImage
@@ -59,58 +59,60 @@ public final class SemanticRetoucher {
         var currentImage = inputImage
         let targetExtent = inputImage.extent
         let maxDim = max(targetExtent.width, targetExtent.height)
-        let resScale = Float(max(1.0, maxDim / 1200.0))
+        let resScale = Float(max(1.0, maxDim / 1800.0))
         
-        // 1. CABELO & BARBA (Acutância e Nitidez Fio a Fio)
+        // 1. CABELO & BARBA (Acutância Equilibrada e Textura Fina)
         if let hairMask = mattes.hair, settings.hairDetailBoost > 0.01 {
             let scaledMask = matchMaskScale(mask: hairMask, targetExtent: targetExtent)
-            let hairEnhanced = currentImage.applyingFilter("CIUnsharpMask", parameters: [
-                kCIInputRadiusKey: 1.2 * resScale,
-                kCIInputIntensityKey: settings.hairDetailBoost * 2.2
-            ])
+            let hairEnhanced = currentImage.clampedToExtent().applyingFilter("CIUnsharpMask", parameters: [
+                kCIInputRadiusKey: 1.0 * resScale,
+                kCIInputIntensityKey: settings.hairDetailBoost * 0.65
+            ]).cropped(to: targetExtent)
+            
             currentImage = hairEnhanced.applyingFilter("CIBlendWithMask", parameters: [
                 kCIInputBackgroundImageKey: currentImage,
                 kCIInputMaskImageKey: scaledMask
             ])
         }
         
-        // 2. PELE HUMANA (Retoque Orgânico: Preserva Poros e Remove Manchas)
+        // 2. PELE HUMANA (Preservação de Poros e Remoção Suave de Manchas)
         if let skinMask = mattes.skin, settings.skinSmoothing > 0.01 {
             let scaledMask = matchMaskScale(mask: skinMask, targetExtent: targetExtent)
-            let smoothedSkin = currentImage.applyingFilter("CIBilateralFilter", parameters: [
-                kCIInputRadiusKey: (2.0 + (settings.skinSmoothing * 3.0)) * resScale,
-                "inputDistanceSigma": 0.10
-            ])
+            let smoothedSkin = currentImage.clampedToExtent().applyingFilter("CIBilateralFilter", parameters: [
+                kCIInputRadiusKey: (1.8 + (settings.skinSmoothing * 2.0)) * resScale,
+                "inputDistanceSigma": 0.08
+            ]).cropped(to: targetExtent)
+            
             let warmSkin = smoothedSkin.applyingFilter("CIVibrance", parameters: [
-                "inputAmount": 0.08
+                "inputAmount": 0.05
             ])
+            
             currentImage = warmSkin.applyingFilter("CIBlendWithMask", parameters: [
                 kCIInputBackgroundImageKey: currentImage,
                 kCIInputMaskImageKey: scaledMask
             ])
         }
         
-        // 3. CÉU & NUVENS (Efeito Polarizador Cinematográfico)
+        // 3. CÉU & NUVENS (Proteção de Gradiente 16-bit, Zero Banding)
         if let skyMask = mattes.sky, settings.skyEnhancement > 0.01 {
             let scaledMask = matchMaskScale(mask: skyMask, targetExtent: targetExtent)
-            let deepSky = currentImage.applyingFilter("CIColorControls", parameters: [
-                kCIInputContrastKey: 1.0 + (settings.skyEnhancement * 0.15),
-                kCIInputSaturationKey: 1.0 + (settings.skyEnhancement * 0.25)
+            // Usa Vibrance em vez de ColorControls para não quebrar o bit-depth em faixas
+            let enhancedSky = currentImage.applyingFilter("CIVibrance", parameters: [
+                "inputAmount": settings.skyEnhancement * 0.25
             ])
-            currentImage = deepSky.applyingFilter("CIBlendWithMask", parameters: [
+            
+            currentImage = enhancedSky.applyingFilter("CIBlendWithMask", parameters: [
                 kCIInputBackgroundImageKey: currentImage,
                 kCIInputMaskImageKey: scaledMask
             ])
         }
         
-        // 4. DENTES & SORRISO (Clareamento Natural de Estúdio)
+        // 4. DENTES & SORRISO (Clareamento Natural)
         if let teethMask = mattes.teeth, settings.teethBrightening > 0.01 {
             let scaledMask = matchMaskScale(mask: teethMask, targetExtent: targetExtent)
-            // Aumenta levemente o brilho e reduz a saturação para neutralizar tons amarelados
             let whitenedTeeth = currentImage.applyingFilter("CIColorControls", parameters: [
-                kCIInputBrightnessKey: settings.teethBrightening * 0.12,
-                kCIInputSaturationKey: 1.0 - (settings.teethBrightening * 0.40),
-                kCIInputContrastKey: 1.05
+                kCIInputBrightnessKey: settings.teethBrightening * 0.08,
+                kCIInputSaturationKey: 1.0 - (settings.teethBrightening * 0.30)
             ])
             currentImage = whitenedTeeth.applyingFilter("CIBlendWithMask", parameters: [
                 kCIInputBackgroundImageKey: currentImage,
@@ -118,32 +120,28 @@ public final class SemanticRetoucher {
             ])
         }
         
-        // 5. ÓCULOS & ARMAÇÕES (Anti-Reflexo e Nitidez de Lentes)
+        // 5. ÓCULOS & ARMAÇÕES (Claridade sem Reflexos Estranhos)
         if let glassesMask = mattes.glasses, settings.glassesClarity > 0.01 {
             let scaledMask = matchMaskScale(mask: glassesMask, targetExtent: targetExtent)
-            let sharpGlasses = currentImage.applyingFilter("CIUnsharpMask", parameters: [
-                kCIInputRadiusKey: 1.5 * resScale,
-                kCIInputIntensityKey: settings.glassesClarity * 1.5
-            ]).applyingFilter("CIColorControls", parameters: [
-                kCIInputContrastKey: 1.0 + (settings.glassesClarity * 0.10)
-            ])
+            let sharpGlasses = currentImage.clampedToExtent().applyingFilter("CIUnsharpMask", parameters: [
+                kCIInputRadiusKey: 1.2 * resScale,
+                kCIInputIntensityKey: settings.glassesClarity * 0.50
+            ]).cropped(to: targetExtent)
+            
             currentImage = sharpGlasses.applyingFilter("CIBlendWithMask", parameters: [
                 kCIInputBackgroundImageKey: currentImage,
                 kCIInputMaskImageKey: scaledMask
             ])
         }
         
-        // 6. PROFUNDIDADE / BOKEH ÓPTICO (Simulação de Queda de Foco de Lente Full Frame)
+        // 6. PROFUNDIDADE / BOKEH ÓPTICO (Desfoque Suave de Fundo)
         if let depthMask = mattes.depth, settings.opticalBokehDepth > 0.01 {
             let scaledMask = matchMaskScale(mask: depthMask, targetExtent: targetExtent)
-            
-            // Inverte a máscara do sujeito para atuar no fundo (background)
             let backgroundMask = scaledMask.applyingFilter("CIColorInvert")
             
-            // Aplica um desfoque suave de bokeh no fundo
-            let blurredBackground = currentImage.applyingFilter("CIGaussianBlur", parameters: [
-                kCIInputRadiusKey: settings.opticalBokehDepth * 6.0 * resScale
-            ])
+            let blurredBackground = currentImage.clampedToExtent().applyingFilter("CIGaussianBlur", parameters: [
+                kCIInputRadiusKey: settings.opticalBokehDepth * 4.0 * resScale
+            ]).cropped(to: targetExtent)
             
             currentImage = blurredBackground.applyingFilter("CIBlendWithMask", parameters: [
                 kCIInputBackgroundImageKey: currentImage,
@@ -154,7 +152,6 @@ public final class SemanticRetoucher {
         return currentImage
     }
     
-    // Ajusta a escala da máscara para coincidir exatamente com a imagem alvo
     private func matchMaskScale(mask: CIImage, targetExtent: CGRect) -> CIImage {
         let maskExtent = mask.extent
         guard maskExtent.width > 0 && maskExtent.height > 0 else { return mask }

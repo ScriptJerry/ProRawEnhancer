@@ -38,7 +38,7 @@ public struct ContentView: View {
                         VStack(spacing: 12) {
                             ProgressView()
                                 .scaleEffect(1.5)
-                            Text("Carregando ProRAW e extraindo mapas semânticos...")
+                            Text("Carregando ProRAW em 16-Bit e calibrando cores...")
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(.secondary)
                         }
@@ -140,43 +140,43 @@ public struct ContentView: View {
                 HStack(spacing: 12) {
                     presetButton(title: "Leica Natural", icon: "circle.circle", preset: .default)
                     presetButton(title: "Sony A7 Pro", icon: "sparkles", preset: EnhancementSettings(
-                        microContrast: 0.75,
-                        toneDepth: 0.45,
-                        highlightRollOff: 0.85,
-                        shadowRichness: 0.2,
-                        opticalGrain: 0.05,
-                        colorVibrance: 0.15,
+                        microContrast: 0.40,
+                        toneDepth: 0.35,
+                        highlightRollOff: 0.70,
+                        shadowRichness: 0.15,
+                        opticalGrain: 0.0,
+                        colorVibrance: 0.12,
                         enableNeuralEngine: true,
-                        neuralTextureDetail: 0.80,
+                        neuralTextureDetail: 0.45,
                         enableSemanticRetouch: true,
-                        hairDetailBoost: 0.70,
-                        skinSmoothing: 0.30,
-                        skyEnhancement: 0.40,
-                        teethBrightening: 0.35,
-                        glassesClarity: 0.40,
-                        opticalBokehDepth: 0.30
+                        hairDetailBoost: 0.45,
+                        skinSmoothing: 0.25,
+                        skyEnhancement: 0.30,
+                        teethBrightening: 0.25,
+                        glassesClarity: 0.30,
+                        opticalBokehDepth: 0.20
                     ))
                     presetButton(title: "Arri Cinema", icon: "film", preset: EnhancementSettings(
-                        microContrast: 0.4,
-                        toneDepth: 0.8,
-                        highlightRollOff: 0.95,
-                        shadowRichness: 0.45,
-                        opticalGrain: 0.25,
-                        colorVibrance: 0.05,
+                        microContrast: 0.25,
+                        toneDepth: 0.55,
+                        highlightRollOff: 0.85,
+                        shadowRichness: 0.30,
+                        opticalGrain: 0.05,
+                        colorVibrance: 0.08,
                         enableNeuralEngine: true,
-                        neuralTextureDetail: 0.60,
+                        neuralTextureDetail: 0.35,
                         enableSemanticRetouch: true,
-                        hairDetailBoost: 0.50,
-                        skinSmoothing: 0.45,
-                        skyEnhancement: 0.50,
+                        hairDetailBoost: 0.35,
+                        skinSmoothing: 0.35,
+                        skyEnhancement: 0.40,
                         teethBrightening: 0.20,
-                        glassesClarity: 0.30,
-                        opticalBokehDepth: 0.45
+                        glassesClarity: 0.25,
+                        opticalBokehDepth: 0.35
                     ))
                     presetButton(title: "Pure Sensor", icon: "camera.filters", preset: EnhancementSettings(
-                        microContrast: 0.1,
-                        toneDepth: 0.2,
-                        highlightRollOff: 0.4,
+                        microContrast: 0.10,
+                        toneDepth: 0.15,
+                        highlightRollOff: 0.30,
                         shadowRichness: 0.0,
                         opticalGrain: 0.0,
                         colorVibrance: 0.0,
@@ -251,7 +251,7 @@ public struct ContentView: View {
                 
                 sliderRow(title: "Nitidez em Cabelos & Barba", value: $settings.hairDetailBoost, range: 0.0...1.0, icon: "comb.fill")
                 sliderRow(title: "Retoque Orgânico de Pele", value: $settings.skinSmoothing, range: 0.0...1.0, icon: "face.smiling.inverse")
-                sliderRow(title: "Céu & Nuvens (Polarizador)", value: $settings.skyEnhancement, range: 0.0...1.0, icon: "cloud.sun.fill")
+                sliderRow(title: "Céu & Nuvens (Gradiente)", value: $settings.skyEnhancement, range: 0.0...1.0, icon: "cloud.sun.fill")
                 sliderRow(title: "Clareamento Natural de Sorriso", value: $settings.teethBrightening, range: 0.0...1.0, icon: "mouth.fill")
                 sliderRow(title: "Claridade & Anti-Reflexo (Óculos)", value: $settings.glassesClarity, range: 0.0...1.0, icon: "eyeglasses")
                 sliderRow(title: "Bokeh Óptico (Fundo Full Frame)", value: $settings.opticalBokehDepth, range: 0.0...1.0, icon: "camera.macro")
@@ -286,7 +286,7 @@ public struct ContentView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Apple Neural Engine (IA)")
                             .font(.system(size: 14, weight: .bold))
-                        Text("Restauração multi-escala de textura e acutância")
+                        Text("Restauração de micro-textura e acutância óptica")
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                     }
@@ -295,7 +295,7 @@ public struct ContentView: View {
             .tint(.accentColor)
             
             if settings.enableNeuralEngine {
-                sliderRow(title: "Intensidade da Reconstrução Neural", value: $settings.neuralTextureDetail, range: 0.0...1.0, icon: "sparkles")
+                sliderRow(title: "Reconstrução de Textura Orgânica", value: $settings.neuralTextureDetail, range: 0.0...1.0, icon: "sparkles")
             }
         }
         .padding(16)
@@ -305,12 +305,12 @@ public struct ContentView: View {
     
     private var adjustmentSlidersSection: some View {
         VStack(spacing: 16) {
-            sliderRow(title: "Micro-Contraste Óptico", value: $settings.microContrast, range: 0.0...1.0, icon: "scope")
+            sliderRow(title: "Micro-Contraste de Lente", value: $settings.microContrast, range: 0.0...1.0, icon: "scope")
             sliderRow(title: "Highlight Roll-Off (Luzes)", value: $settings.highlightRollOff, range: 0.0...1.0, icon: "sun.max")
             sliderRow(title: "Profundidade Tonal (Curva S)", value: $settings.toneDepth, range: 0.0...1.0, icon: "slider.vertical.3")
             sliderRow(title: "Riqueza de Sombras", value: $settings.shadowRichness, range: 0.0...1.0, icon: "moon.fill")
-            sliderRow(title: "Vibração de Cor (P3)", value: $settings.colorVibrance, range: 0.0...0.5, icon: "paintpalette.fill")
-            sliderRow(title: "Grão de Sensor (Filme)", value: $settings.opticalGrain, range: 0.0...0.5, icon: "circle.grid.3x3.fill")
+            sliderRow(title: "Vibração de Cor (P3 16-Bit)", value: $settings.colorVibrance, range: 0.0...0.5, icon: "paintpalette.fill")
+            sliderRow(title: "Grão de Filme Analógico", value: $settings.opticalGrain, range: 0.0...0.5, icon: "circle.grid.3x3.fill")
         }
         .padding(16)
         .background(Color(uiColor: .secondarySystemGroupedBackground))
@@ -354,7 +354,7 @@ public struct ContentView: View {
                             ProgressView()
                                 .tint(.white)
                                 .padding(.trailing, 4)
-                            Text("Processando...")
+                            Text("Processando 16-Bit...")
                         } else {
                             Image(systemName: "sparkles")
                             Text("Salvar Foto")
@@ -399,9 +399,9 @@ public struct ContentView: View {
                     try? data.write(to: tempURL)
                     self.currentImageURL = tempURL
                     
-                    // Carrega a imagem e extrai todas as máscaras semânticas do ProRAW
+                    // Carrega a imagem e extrai todos os mapas semânticos em 16-bit
                     DispatchQueue.global(qos: .userInteractive).async {
-                        if let loaded = ProRAWProcessor.shared.loadCIImage(from: tempURL, maxDimension: 1200) {
+                        if let loaded = ProRAWProcessor.shared.loadCIImage(from: tempURL, maxDimension: 1400) {
                             let origUI = ProRAWProcessor.shared.renderUIImage(from: loaded.original)
                             let enhUI = ProRAWProcessor.shared.process(inputImage: loaded.cleanRaw, mattes: loaded.mattes, settings: self.settings, isDraft: true)
                             
@@ -443,7 +443,7 @@ public struct ContentView: View {
         isSaving = true
         
         DispatchQueue.global(qos: .userInitiated).async {
-            // Carrega em resolução máxima nativa extraindo todos os mapas semânticos
+            // Carrega em resolução máxima nativa com precisão de 16-bit
             if let fullResData = ProRAWProcessor.shared.loadCIImage(from: url, maxDimension: nil),
                let fullResExport = ProRAWProcessor.shared.process(inputImage: fullResData.cleanRaw, mattes: fullResData.mattes, settings: self.settings, isDraft: false) {
                 
@@ -451,7 +451,7 @@ public struct ContentView: View {
                     DispatchQueue.main.async {
                         self.isSaving = false
                         if success {
-                            self.alertMessage = "Foto processada com o Apple Neural Engine + Retoque Semântico em 6 Canais e salva com sucesso!"
+                            self.alertMessage = "Foto salva em 16-Bit com renderização de estúdio!"
                             self.showSavedAlert = true
                         } else {
                             self.alertMessage = "Erro ao salvar: \(error?.localizedDescription ?? "Permissão negada.")"
