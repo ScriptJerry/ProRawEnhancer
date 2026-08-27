@@ -5,8 +5,9 @@ public struct ContentView: View {
     @State private var selectedPhotoItem: PhotosPickerItem? = nil
     @State private var currentImageURL: URL? = nil
     
-    // Imagens base em memória (CIImage para reprocessamento instantâneo em GPU)
+    // Imagens base e máscaras semânticas em memória
     @State private var cachedPreviewCIImage: CIImage? = nil
+    @State private var loadedMattes: SemanticMattes = SemanticMattes()
     @State private var originalPreviewUI: UIImage? = nil
     @State private var enhancedPreviewUI: UIImage? = nil
     
@@ -37,7 +38,7 @@ public struct ContentView: View {
                         VStack(spacing: 12) {
                             ProgressView()
                                 .scaleEffect(1.5)
-                            Text("Carregando foto e calibrando sensor...")
+                            Text("Carregando ProRAW e extraindo máscaras semânticas...")
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(.secondary)
                         }
@@ -56,6 +57,7 @@ public struct ContentView: View {
                         VStack(spacing: 20) {
                             if cachedPreviewCIImage != nil {
                                 presetSelectorSection
+                                semanticRetouchSection
                                 neuralEngineSection
                                 adjustmentSlidersSection
                             }
@@ -145,7 +147,11 @@ public struct ContentView: View {
                         opticalGrain: 0.05,
                         colorVibrance: 0.15,
                         enableNeuralEngine: true,
-                        neuralTextureDetail: 0.80
+                        neuralTextureDetail: 0.80,
+                        enableSemanticRetouch: true,
+                        hairDetailBoost: 0.70,
+                        skinSmoothing: 0.30,
+                        skyEnhancement: 0.40
                     ))
                     presetButton(title: "Arri Cinema", icon: "film", preset: EnhancementSettings(
                         microContrast: 0.4,
@@ -155,7 +161,11 @@ public struct ContentView: View {
                         opticalGrain: 0.25,
                         colorVibrance: 0.05,
                         enableNeuralEngine: true,
-                        neuralTextureDetail: 0.60
+                        neuralTextureDetail: 0.60,
+                        enableSemanticRetouch: true,
+                        hairDetailBoost: 0.50,
+                        skinSmoothing: 0.45,
+                        skyEnhancement: 0.50
                     ))
                     presetButton(title: "Pure Sensor", icon: "camera.filters", preset: EnhancementSettings(
                         microContrast: 0.1,
@@ -165,7 +175,11 @@ public struct ContentView: View {
                         opticalGrain: 0.0,
                         colorVibrance: 0.0,
                         enableNeuralEngine: false,
-                        neuralTextureDetail: 0.0
+                        neuralTextureDetail: 0.0,
+                        enableSemanticRetouch: false,
+                        hairDetailBoost: 0.0,
+                        skinSmoothing: 0.0,
+                        skyEnhancement: 0.0
                     ))
                 }
             }
@@ -195,6 +209,57 @@ public struct ContentView: View {
         }
     }
     
+    private var semanticRetouchSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle(isOn: $settings.enableSemanticRetouch) {
+                HStack(spacing: 8) {
+                    Image(systemName: "person.crop.circle.badge.checkmark")
+                        .foregroundColor(.green)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Retoque Semântico ProRAW")
+                            .font(.system(size: 14, weight: .bold))
+                        Text("Tratamento cirúrgico de pele, cabelo e céu")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .tint(.accentColor)
+            
+            if settings.enableSemanticRetouch {
+                // Badges informando quais máscaras foram detectadas no ProRAW
+                HStack(spacing: 6) {
+                    matteBadge(title: "Pele", detected: loadedMattes.skin != nil)
+                    matteBadge(title: "Cabelo", detected: loadedMattes.hair != nil)
+                    matteBadge(title: "Céu", detected: loadedMattes.sky != nil)
+                }
+                .padding(.vertical, 2)
+                
+                sliderRow(title: "Nitidez em Cabelos & Barba", value: $settings.hairDetailBoost, range: 0.0...1.0, icon: "comb.fill")
+                sliderRow(title: "Retoque Orgânico de Pele", value: $settings.skinSmoothing, range: 0.0...1.0, icon: "face.smiling.inverse")
+                sliderRow(title: "Céu & Nuvens Cinematográficos", value: $settings.skyEnhancement, range: 0.0...1.0, icon: "cloud.sun.fill")
+            }
+        }
+        .padding(16)
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .cornerRadius(16)
+    }
+    
+    private func matteBadge(title: String, detected: Bool) -> some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(detected ? Color.green : Color.gray.opacity(0.5))
+                .frame(width: 6, height: 6)
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(detected ? .primary : .secondary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Color(uiColor: .tertiarySystemGroupedBackground))
+        .cornerRadius(8)
+    }
+    
     private var neuralEngineSection: some View {
         VStack(spacing: 12) {
             Toggle(isOn: $settings.enableNeuralEngine) {
@@ -204,7 +269,7 @@ public struct ContentView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Apple Neural Engine (IA)")
                             .font(.system(size: 14, weight: .bold))
-                        Text("Restauração profunda de textura em alta resolução")
+                        Text("Restauração multi-escala de textura e acutância")
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                     }
@@ -272,10 +337,10 @@ public struct ContentView: View {
                             ProgressView()
                                 .tint(.white)
                                 .padding(.trailing, 4)
-                            Text("Processando IA...")
+                            Text("Processando...")
                         } else {
                             Image(systemName: "sparkles")
-                            Text("Salvar Foto (IA)")
+                            Text("Salvar Foto")
                         }
                     }
                     .font(.system(size: 15, weight: .bold))
@@ -317,14 +382,15 @@ public struct ContentView: View {
                     try? data.write(to: tempURL)
                     self.currentImageURL = tempURL
                     
-                    // Carrega a imagem otimizada para o preview em tempo real (1200px máx para 60fps)
+                    // Carrega a imagem e extrai as máscaras semânticas do ProRAW
                     DispatchQueue.global(qos: .userInteractive).async {
-                        if let images = ProRAWProcessor.shared.loadCIImage(from: tempURL, maxDimension: 1200) {
-                            let origUI = ProRAWProcessor.shared.renderUIImage(from: images.original)
-                            let enhUI = ProRAWProcessor.shared.process(inputImage: images.cleanRaw, settings: self.settings, isDraft: true)
+                        if let loaded = ProRAWProcessor.shared.loadCIImage(from: tempURL, maxDimension: 1200) {
+                            let origUI = ProRAWProcessor.shared.renderUIImage(from: loaded.original)
+                            let enhUI = ProRAWProcessor.shared.process(inputImage: loaded.cleanRaw, mattes: loaded.mattes, settings: self.settings, isDraft: true)
                             
                             DispatchQueue.main.async {
-                                self.cachedPreviewCIImage = images.cleanRaw
+                                self.cachedPreviewCIImage = loaded.cleanRaw
+                                self.loadedMattes = loaded.mattes
                                 self.originalPreviewUI = origUI
                                 self.enhancedPreviewUI = enhUI
                                 self.isProcessing = false
@@ -348,7 +414,7 @@ public struct ContentView: View {
         guard let baseCI = cachedPreviewCIImage else { return }
         
         DispatchQueue.global(qos: .userInteractive).async {
-            let rendered = ProRAWProcessor.shared.process(inputImage: baseCI, settings: self.settings, isDraft: true)
+            let rendered = ProRAWProcessor.shared.process(inputImage: baseCI, mattes: self.loadedMattes, settings: self.settings, isDraft: true)
             DispatchQueue.main.async {
                 self.enhancedPreviewUI = rendered
             }
@@ -360,15 +426,15 @@ public struct ContentView: View {
         isSaving = true
         
         DispatchQueue.global(qos: .userInitiated).async {
-            // Carrega em resolução máxima nativa (sem redução de escala)
-            if let fullResImages = ProRAWProcessor.shared.loadCIImage(from: url, maxDimension: nil),
-               let fullResExport = ProRAWProcessor.shared.process(inputImage: fullResImages.cleanRaw, settings: self.settings, isDraft: false) {
+            // Carrega em resolução máxima nativa extraindo os mapas semânticos originais
+            if let fullResData = ProRAWProcessor.shared.loadCIImage(from: url, maxDimension: nil),
+               let fullResExport = ProRAWProcessor.shared.process(inputImage: fullResData.cleanRaw, mattes: fullResData.mattes, settings: self.settings, isDraft: false) {
                 
                 PhotoManager.shared.saveToPhotoLibrary(image: fullResExport) { success, error in
                     DispatchQueue.main.async {
                         self.isSaving = false
                         if success {
-                            self.alertMessage = "Foto processada com o Apple Neural Engine e salva com sucesso!"
+                            self.alertMessage = "Foto processada com o Apple Neural Engine + Retoque Semântico e salva com sucesso!"
                             self.showSavedAlert = true
                         } else {
                             self.alertMessage = "Erro ao salvar: \(error?.localizedDescription ?? "Permissão negada.")"

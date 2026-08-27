@@ -10,8 +10,16 @@ public struct EnhancementSettings: Equatable {
     public var shadowRichness: Float = 0.30         // Pretos aprofundados
     public var opticalGrain: Float = 0.15          // Grão de sensor analógico
     public var colorVibrance: Float = 0.18         // Vibração Display P3
+    
+    // Configurações do Apple Neural Engine
     public var enableNeuralEngine: Bool = true     // Ativa a Restauração Neural
     public var neuralTextureDetail: Float = 0.85   // Intensidade da reconstrução de textura
+    
+    // Configurações de Máscaras Semânticas (IA ProRAW)
+    public var enableSemanticRetouch: Bool = true  // Ativa o Retoque Semântico por IA
+    public var hairDetailBoost: Float = 0.60       // Nitidez Fio a Fio (Cabelo e Barba)
+    public var skinSmoothing: Float = 0.35         // Retoque Orgânico de Pele
+    public var skyEnhancement: Float = 0.40        // Céu & Nuvens Cinematográficos
     
     public static let `default` = EnhancementSettings()
 }
@@ -30,8 +38,8 @@ public final class ProRAWProcessor {
         ])
     }
     
-    /// Processa a imagem aplicando o pipeline óptico + reconstrução neural multi-escala
-    public func process(inputImage: CIImage, settings: EnhancementSettings = .default, isDraft: Bool = false) -> UIImage? {
+    /// Processa a imagem aplicando o pipeline óptico + reconstrução neural + retoque semântico
+    public func process(inputImage: CIImage, mattes: SemanticMattes = SemanticMattes(), settings: EnhancementSettings = .default, isDraft: Bool = false) -> UIImage? {
         var currentImage = inputImage
         
         let extent = inputImage.extent
@@ -39,12 +47,16 @@ public final class ProRAWProcessor {
         let resScale = Float(max(1.0, maxDim / 1200.0))
         
         // 1. RESTAURAÇÃO NEURAL DE TEXTURA (Multi-Banda: Fina, Média e Estrutura)
-        // Agora visível tanto no Preview ao vivo quanto na Exportação de 48MP
         if settings.enableNeuralEngine {
             currentImage = NeuralEngineRestorer.shared.enhanceTexture(ciImage: currentImage, intensity: settings.neuralTextureDetail)
         }
         
-        // 2. MICRO-CONTRASTE ÓPTICO ADAPTATIVO
+        // 2. RETOQUE SEMÂNTICO CIRÚRGICO POR IA (Pele, Cabelo, Céu)
+        if settings.enableSemanticRetouch && mattes.hasAnyMatte {
+            currentImage = SemanticRetoucher.shared.applySelectiveRetouch(to: currentImage, mattes: mattes, settings: settings)
+        }
+        
+        // 3. MICRO-CONTRASTE ÓPTICO ADAPTATIVO
         if settings.microContrast > 0.01 {
             let radius = (isDraft ? 1.0 : 1.8) * resScale
             let intensity = settings.microContrast * 1.1
@@ -54,7 +66,7 @@ public final class ProRAWProcessor {
             ])
         }
         
-        // 3. CURVA TONAL CINEMATOGRÁFICA (Highlight Roll-off & Profundidade 3D)
+        // 4. CURVA TONAL CINEMATOGRÁFICA (Highlight Roll-off & Profundidade 3D)
         let s = CGFloat(settings.toneDepth)
         let rollOff = CGFloat(settings.highlightRollOff)
         let shadow = CGFloat(settings.shadowRichness)
@@ -73,14 +85,14 @@ public final class ProRAWProcessor {
             "inputPoint4": p4
         ])
         
-        // 4. COLOR SCIENCE / VIBRAÇÃO P3
+        // 5. COLOR SCIENCE / VIBRAÇÃO P3
         if abs(settings.colorVibrance) > 0.01 {
             currentImage = currentImage.applyingFilter("CIVibrance", parameters: [
                 "inputAmount": settings.colorVibrance
             ])
         }
         
-        // 5. GRÃO ÓPTICO DE SENSOR
+        // 6. GRÃO ÓPTICO DE SENSOR
         if settings.opticalGrain > 0.01 && !isDraft {
             currentImage = applyFastGrain(to: currentImage, amount: settings.opticalGrain)
         }
@@ -93,9 +105,10 @@ public final class ProRAWProcessor {
         return nil
     }
     
-    /// Carrega e processa a imagem do arquivo (DNG RAW ou imagem normal)
-    public func loadCIImage(from url: URL, maxDimension: CGFloat? = nil) -> (original: CIImage, cleanRaw: CIImage)? {
+    /// Carrega e processa a imagem do arquivo extraindo também os mapas semânticos
+    public func loadCIImage(from url: URL, maxDimension: CGFloat? = nil) -> (original: CIImage, cleanRaw: CIImage, mattes: SemanticMattes)? {
         var baseCIImage: CIImage?
+        var mattes = SemanticMattes()
         
         // Tenta carregar como RAW nativo via CIRAWFilter
         if let rawFilter = CIRAWFilter(imageURL: url) {
@@ -104,6 +117,9 @@ public final class ProRAWProcessor {
             rawFilter.colorNoiseReductionAmount = 0.75
             rawFilter.boostAmount = 0.0
             baseCIImage = rawFilter.outputImage
+            
+            // Extrai as máscaras semânticas de IA embutidas no DNG
+            mattes = SemanticRetoucher.shared.extractMattes(from: rawFilter)
         } else {
             // Fallback para imagem padrão (JPEG/HEIC/PNG)
             baseCIImage = CIImage(contentsOf: url, options: [.applyOrientationProperty: true])
@@ -121,7 +137,7 @@ public final class ProRAWProcessor {
             }
         }
         
-        return (original: image, cleanRaw: image)
+        return (original: image, cleanRaw: image, mattes: mattes)
     }
     
     public func renderUIImage(from ciImage: CIImage) -> UIImage? {
