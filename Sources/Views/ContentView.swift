@@ -140,7 +140,7 @@ public struct ContentView: View {
                 HStack(spacing: 12) {
                     presetButton(title: "Leica Natural", icon: "circle.circle", preset: .default)
                     presetButton(title: "Sony A7 Pro", icon: "sparkles", preset: EnhancementSettings(
-                        microContrast: 0.40,
+                        microContrast: 0.30,
                         toneDepth: 0.35,
                         highlightRollOff: 0.70,
                         shadowRichness: 0.15,
@@ -149,34 +149,34 @@ public struct ContentView: View {
                         enableNeuralEngine: true,
                         neuralTextureDetail: 0.45,
                         enableSemanticRetouch: true,
-                        hairDetailBoost: 0.45,
+                        hairDetailBoost: 0.40,
                         skinSmoothing: 0.25,
-                        skyEnhancement: 0.30,
+                        skyEnhancement: 0.25,
                         teethBrightening: 0.25,
-                        glassesClarity: 0.30,
-                        opticalBokehDepth: 0.20
+                        glassesClarity: 0.25,
+                        opticalBokehDepth: 0.0
                     ))
                     presetButton(title: "Arri Cinema", icon: "film", preset: EnhancementSettings(
-                        microContrast: 0.25,
-                        toneDepth: 0.55,
+                        microContrast: 0.20,
+                        toneDepth: 0.50,
                         highlightRollOff: 0.85,
-                        shadowRichness: 0.30,
-                        opticalGrain: 0.05,
+                        shadowRichness: 0.25,
+                        opticalGrain: 0.0,
                         colorVibrance: 0.08,
                         enableNeuralEngine: true,
-                        neuralTextureDetail: 0.35,
+                        neuralTextureDetail: 0.30,
                         enableSemanticRetouch: true,
-                        hairDetailBoost: 0.35,
-                        skinSmoothing: 0.35,
-                        skyEnhancement: 0.40,
+                        hairDetailBoost: 0.30,
+                        skinSmoothing: 0.30,
+                        skyEnhancement: 0.35,
                         teethBrightening: 0.20,
-                        glassesClarity: 0.25,
-                        opticalBokehDepth: 0.35
+                        glassesClarity: 0.20,
+                        opticalBokehDepth: 0.0
                     ))
                     presetButton(title: "Pure Sensor", icon: "camera.filters", preset: EnhancementSettings(
-                        microContrast: 0.10,
-                        toneDepth: 0.15,
-                        highlightRollOff: 0.30,
+                        microContrast: 0.0,
+                        toneDepth: 0.10,
+                        highlightRollOff: 0.20,
                         shadowRichness: 0.0,
                         opticalGrain: 0.0,
                         colorVibrance: 0.0,
@@ -236,7 +236,6 @@ public struct ContentView: View {
             .tint(.accentColor)
             
             if settings.enableSemanticRetouch {
-                // Badges informando quais máscaras foram detectadas no ProRAW
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         matteBadge(title: "Pele", detected: loadedMattes.skin != nil)
@@ -286,7 +285,7 @@ public struct ContentView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Apple Neural Engine (IA)")
                             .font(.system(size: 14, weight: .bold))
-                        Text("Restauração de micro-textura e acutância óptica")
+                        Text("Acutância óptica pura de micro-textura")
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                     }
@@ -295,7 +294,7 @@ public struct ContentView: View {
             .tint(.accentColor)
             
             if settings.enableNeuralEngine {
-                sliderRow(title: "Reconstrução de Textura Orgânica", value: $settings.neuralTextureDetail, range: 0.0...1.0, icon: "sparkles")
+                sliderRow(title: "Micro-Textura Orgânica", value: $settings.neuralTextureDetail, range: 0.0...1.0, icon: "sparkles")
             }
         }
         .padding(16)
@@ -443,7 +442,6 @@ public struct ContentView: View {
         isSaving = true
         
         DispatchQueue.global(qos: .userInitiated).async {
-            // Carrega em resolução máxima nativa com precisão de 16-bit
             if let fullResData = ProRAWProcessor.shared.loadCIImage(from: url, maxDimension: nil),
                let fullResExport = ProRAWProcessor.shared.process(inputImage: fullResData.cleanRaw, mattes: fullResData.mattes, settings: self.settings, isDraft: false) {
                 
