@@ -89,10 +89,10 @@ public struct ContentView: View {
             } message: {
                 Text(alertMessage)
             }
-            .onChange(of: selectedPhotoItem) { _ in
+            .onChange(of: selectedPhotoItem) {
                 loadSelectedPhoto(selectedPhotoItem)
             }
-            .onChange(of: settings) { _ in
+            .onChange(of: settings) {
                 updateLivePreview()
             }
         }

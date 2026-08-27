@@ -1,6 +1,7 @@
 import Foundation
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import ImageIO
 import UIKit
 
 public struct EnhancementSettings: Equatable {
@@ -137,15 +138,15 @@ public final class ProRAWProcessor {
             baseCIImage = rawFilter.outputImage
             mattes = SemanticRetoucher.shared.extractMattes(from: rawFilter)
             
-            // Extrai o Gain Map HDR embutido no DNG ProRAW
+            // Extrai o Gain Map HDR via CGImageSource (API pública correta no iOS 17+)
             if #available(iOS 17.0, *) {
-                gainMap = rawFilter.linearGainMapRepresentation
-                gainMapHeadroom = Float(rawFilter.boostShadowAmount) // Headroom disponível
-                // Fallback para headroom padrão do iPhone (aprox. 4x = ~1000 nits)
-                if gainMapHeadroom < 1.0 { gainMapHeadroom = 4.0 }
+                (gainMap, gainMapHeadroom) = Self.extractHDRGainMap(from: url)
             }
         } else {
             baseCIImage = CIImage(contentsOf: url, options: [.applyOrientationProperty: true])
+            if #available(iOS 17.0, *) {
+                (gainMap, gainMapHeadroom) = Self.extractHDRGainMap(from: url)
+            }
         }
         
         guard var image = baseCIImage else { return nil }
@@ -210,5 +211,48 @@ public final class ProRAWProcessor {
         return blendedGrain.applyingFilter("CISoftLightBlendMode", parameters: [
             kCIInputBackgroundImageKey: inputImage
         ])
+    }
+    
+    /// Extrai o HDR Gain Map de qualquer arquivo de imagem usando CGImageSource (API pública oficial iOS 17+)
+    @available(iOS 17.0, *)
+    private static func extractHDRGainMap(from url: URL) -> (CIImage?, Float) {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              CGImageSourceGetCount(source) > 0 else {
+            return (nil, 4.0)
+        }
+        
+        // Tenta extrair o Gain Map como dado auxiliar de luminância HDR
+        if let gainMapData = CGImageSourceCopyAuxiliaryDataInfoAtIndex(
+            source, 0,
+            kCGImageAuxiliaryDataTypeHDRGainMap as CFString
+        ) as? [AnyHashable: Any],
+           let gainMapPixelData = gainMapData[kCGImageAuxiliaryDataInfoData] as? Data,
+           let gainMapDesc = gainMapData[kCGImageAuxiliaryDataInfoDataDescription] as? [AnyHashable: Any] {
+            
+            let width = gainMapDesc["Width"] as? Int ?? 0
+            let height = gainMapDesc["Height"] as? Int ?? 0
+            let headroom = gainMapDesc["MaximumContentHeadroom"] as? Float ?? 4.0
+            
+            if width > 0 && height > 0 {
+                let provider = gainMapPixelData.withUnsafeBytes {
+                    CGDataProvider(dataInfo: nil, data: $0.baseAddress!, size: gainMapPixelData.count) { _, _, _ in }
+                }
+                if let provider = provider,
+                   let cgGainMap = CGImage(
+                    width: width, height: height,
+                    bitsPerComponent: 8, bitsPerPixel: 8,
+                    bytesPerRow: width,
+                    space: CGColorSpaceCreateDeviceGray(),
+                    bitmapInfo: CGBitmapInfo(rawValue: 0),
+                    provider: provider,
+                    decode: nil, shouldInterpolate: true,
+                    intent: .defaultIntent
+                   ) {
+                    return (CIImage(cgImage: cgGainMap), headroom)
+                }
+            }
+        }
+        
+        return (nil, 4.0)
     }
 }
