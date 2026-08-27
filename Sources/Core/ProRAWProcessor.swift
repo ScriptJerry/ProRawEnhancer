@@ -20,6 +20,9 @@ public struct EnhancementSettings: Equatable {
     public var hairDetailBoost: Float = 0.60       // Nitidez Fio a Fio (Cabelo e Barba)
     public var skinSmoothing: Float = 0.35         // Retoque Orgânico de Pele
     public var skyEnhancement: Float = 0.40        // Céu & Nuvens Cinematográficos
+    public var teethBrightening: Float = 0.30      // Clareamento Natural de Sorriso
+    public var glassesClarity: Float = 0.40        // Claridade e Anti-Reflexo em Óculos
+    public var opticalBokehDepth: Float = 0.30     // Desfoque Óptico de Fundo (Bokeh Full Frame)
     
     public static let `default` = EnhancementSettings()
 }
@@ -38,7 +41,7 @@ public final class ProRAWProcessor {
         ])
     }
     
-    /// Processa a imagem aplicando o pipeline óptico + reconstrução neural + retoque semântico
+    /// Processa a imagem aplicando o pipeline óptico + reconstrução neural + retoque semântico em 6 canais
     public func process(inputImage: CIImage, mattes: SemanticMattes = SemanticMattes(), settings: EnhancementSettings = .default, isDraft: Bool = false) -> UIImage? {
         var currentImage = inputImage
         
@@ -51,7 +54,7 @@ public final class ProRAWProcessor {
             currentImage = NeuralEngineRestorer.shared.enhanceTexture(ciImage: currentImage, intensity: settings.neuralTextureDetail)
         }
         
-        // 2. RETOQUE SEMÂNTICO CIRÚRGICO POR IA (Pele, Cabelo, Céu)
+        // 2. RETOQUE SEMÂNTICO CIRÚRGICO POR IA (Pele, Cabelo, Céu, Dentes, Óculos, Profundidade)
         if settings.enableSemanticRetouch && mattes.hasAnyMatte {
             currentImage = SemanticRetoucher.shared.applySelectiveRetouch(to: currentImage, mattes: mattes, settings: settings)
         }
@@ -118,7 +121,7 @@ public final class ProRAWProcessor {
             rawFilter.boostAmount = 0.0
             baseCIImage = rawFilter.outputImage
             
-            // Extrai as máscaras semânticas de IA embutidas no DNG
+            // Extrai todas as máscaras semânticas de IA embutidas no DNG
             mattes = SemanticRetoucher.shared.extractMattes(from: rawFilter)
         } else {
             // Fallback para imagem padrão (JPEG/HEIC/PNG)
