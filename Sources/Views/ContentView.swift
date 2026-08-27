@@ -65,8 +65,8 @@ public struct ContentView: View {
             } message: {
                 Text("A imagem com qualidade de câmera profissional foi salva na sua biblioteca de fotos.")
             }
-            .onChange(of: selectedPhotoItem) { newItem in
-                loadSelectedPhoto(newItem)
+            .onChange(of: selectedPhotoItem) { _ in
+                loadSelectedPhoto(selectedPhotoItem)
             }
             .onChange(of: settings) { _ in
                 reprocessPreview()
@@ -246,7 +246,7 @@ public struct ContentView: View {
         guard let item = item else { return }
         isProcessing = true
         
-        item.loadTransferable(type: Data.self) { result in
+        _ = item.loadTransferable(type: Data.self) { result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let data):

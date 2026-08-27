@@ -31,16 +31,11 @@ public final class ProRAWProcessor {
     
     /// Processa o arquivo .DNG do Apple ProRAW removendo o processamento digital agressivo
     public func process(dngURL: URL, settings: EnhancementSettings = .default, isDraft: Bool = false) -> UIImage? {
-        var options: [CIImageOption: Any] = [
-            .applyOrientationProperty: true
-        ]
-        if isDraft {
-            options[.allowDraftMode] = true
-        }
-        
-        guard let rawFilter = CIRAWFilter(imageURL: dngURL, options: options) else {
+        guard let rawFilter = CIRAWFilter(imageURL: dngURL) else {
             return nil
         }
+        
+        rawFilter.isDraftModeEnabled = isDraft
         
         // 1. DESATIVA O PÓS-PROCESSAMENTO AGRESSIVO DO SMARTPHONE
         rawFilter.sharpnessAmount = 0.0                  // Elimina halos brancos digitais
@@ -103,15 +98,13 @@ public final class ProRAWProcessor {
     
     /// Gera uma imagem com o processamento padrão original da Apple para comparação
     public func getOriginalRaw(dngURL: URL, isDraft: Bool = false) -> UIImage? {
-        var options: [CIImageOption: Any] = [
-            .applyOrientationProperty: true
-        ]
-        if isDraft {
-            options[.allowDraftMode] = true
+        guard let rawFilter = CIRAWFilter(imageURL: dngURL) else {
+            return nil
         }
         
-        guard let rawFilter = CIRAWFilter(imageURL: dngURL, options: options),
-              let originalImage = rawFilter.outputImage else {
+        rawFilter.isDraftModeEnabled = isDraft
+        
+        guard let originalImage = rawFilter.outputImage else {
             return nil
         }
         
