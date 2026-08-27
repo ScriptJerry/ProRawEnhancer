@@ -38,10 +38,10 @@ public final class ProRAWProcessor {
         rawFilter.isDraftModeEnabled = isDraft
         
         // 1. DESATIVA O PÓS-PROCESSAMENTO AGRESSIVO DO SMARTPHONE
-        rawFilter.sharpnessAmount = 0.0                  // Elimina halos brancos digitais
-        rawFilter.noiseReductionAmount = 0.10             // Redução mínima para não empastar detalhes finos
-        rawFilter.boostAmount = 0.0                      // Desativa o HDR achatado padrão da Apple
-        rawFilter.colorNoiseReductionAmount = 0.75         // Limpa ruído de cor nas sombras
+        rawFilter.sharpnessAmount = 0.0                          // Elimina halos brancos digitais
+        rawFilter.luminanceNoiseReductionAmount = 0.10           // Redução mínima (preserva textura fina)
+        rawFilter.colorNoiseReductionAmount = 0.75               // Limpa ruído de cor nas sombras
+        rawFilter.boostAmount = 0.0                              // Desativa o HDR achatado padrão da Apple
         
         guard var currentImage = rawFilter.outputImage else {
             return nil
