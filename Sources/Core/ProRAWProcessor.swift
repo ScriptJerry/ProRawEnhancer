@@ -4,25 +4,25 @@ import CoreImage.CIFilterBuiltins
 import UIKit
 
 public struct EnhancementSettings: Equatable {
-    public var microContrast: Float = 0.25         // Micro-contraste de lente médio (profundidade)
-    public var toneDepth: Float = 0.35             // Curva tonal S fotográfica
+    public var microContrast: Float = 0.35         // Micro-contraste de lente médio
+    public var toneDepth: Float = 0.40             // Curva tonal S fotográfica
     public var highlightRollOff: Float = 0.60       // Suavização das altas luzes
-    public var shadowRichness: Float = 0.15         // Pretos aprofundados
+    public var shadowRichness: Float = 0.20         // Pretos aprofundados
     public var opticalGrain: Float = 0.0           // Grão desligado por padrão
-    public var colorVibrance: Float = 0.10          // Vibração Display P3 16-bit
+    public var colorVibrance: Float = 0.12          // Vibração Display P3 16-bit
     
     // Configurações do Apple Neural Engine
     public var enableNeuralEngine: Bool = true     // Ativa a Reconstrução de Textura
-    public var neuralTextureDetail: Float = 0.40   // Intensidade da textura fina
+    public var neuralTextureDetail: Float = 0.75   // Intensidade da textura fina de alta potência
     
     // Configurações de Máscaras Semânticas (IA ProRAW)
     public var enableSemanticRetouch: Bool = true  // Ativa o Retoque Semântico por IA
-    public var hairDetailBoost: Float = 0.35       // Nitidez em Cabelo e Barba
-    public var skinSmoothing: Float = 0.25         // Retoque Orgânico de Pele
-    public var skyEnhancement: Float = 0.25        // Céu com gradiente suave
-    public var teethBrightening: Float = 0.20      // Clareamento Natural de Sorriso
-    public var glassesClarity: Float = 0.25        // Claridade em Óculos
-    public var opticalBokehDepth: Float = 0.0      // Desfoque Óptico de Fundo (desligado por padrão)
+    public var hairDetailBoost: Float = 0.50       // Nitidez em Cabelo e Barba
+    public var skinSmoothing: Float = 0.30         // Retoque Orgânico de Pele
+    public var skyEnhancement: Float = 0.30        // Céu com gradiente suave
+    public var teethBrightening: Float = 0.25      // Clareamento Natural de Sorriso
+    public var glassesClarity: Float = 0.30        // Claridade em Óculos
+    public var opticalBokehDepth: Float = 0.0      // Desfoque Óptico de Fundo
     
     public static let `default` = EnhancementSettings()
 }
@@ -43,15 +43,15 @@ public final class ProRAWProcessor {
         ])
     }
     
-    /// Processa a imagem com renderização óptica pura de alta fidelidade
+    /// Processa a imagem com renderização óptica de alta fidelidade
     public func process(inputImage: CIImage, mattes: SemanticMattes = SemanticMattes(), settings: EnhancementSettings = .default, isDraft: Bool = false) -> UIImage? {
         var currentImage = inputImage
         
         let extent = inputImage.extent
         let maxDim = max(extent.width, extent.height)
-        let resScale = Float(max(1.0, maxDim / 2000.0))
+        let resScale = Float(max(1.0, maxDim / 1800.0))
         
-        // 1. RESTAURAÇÃO DE MICRO-TEXTURA (Raio fino, zero halos e zero borrão)
+        // 1. RESTAURAÇÃO NEURAL DE TEXTURA DE ALTA POTÊNCIA (Multi-Oitava)
         if settings.enableNeuralEngine {
             currentImage = NeuralEngineRestorer.shared.enhanceTexture(ciImage: currentImage, intensity: settings.neuralTextureDetail)
         }
@@ -61,26 +61,26 @@ public final class ProRAWProcessor {
             currentImage = SemanticRetoucher.shared.applySelectiveRetouch(to: currentImage, mattes: mattes, settings: settings)
         }
         
-        // 3. MICRO-CONTRASTE ÓPTICO DE MÉDIA FREQUÊNCIA (Profundidade 3D suave)
+        // 3. MICRO-CONTRASTE ÓPTICO DE MÉDIA FREQUÊNCIA
         if settings.microContrast > 0.01 {
-            let radius = (isDraft ? 1.5 : 2.5) * resScale
-            let intensity = settings.microContrast * 0.40
+            let radius = (isDraft ? 1.4 : 2.2) * resScale
+            let intensity = settings.microContrast * 0.50
             currentImage = currentImage.clampedToExtent().applyingFilter("CIUnsharpMask", parameters: [
                 kCIInputRadiusKey: radius,
                 kCIInputIntensityKey: intensity
             ]).cropped(to: extent)
         }
         
-        // 4. CURVA TONAL FOTOGRÁFICA (Highlight Roll-off Suave & Profundidade)
+        // 4. CURVA TONAL FOTOGRÁFICA (Highlight Roll-off Suave & Profundidade 3D)
         let s = CGFloat(settings.toneDepth)
         let rollOff = CGFloat(settings.highlightRollOff)
         let shadow = CGFloat(settings.shadowRichness)
         
         let p0 = CIVector(x: 0.0, y: 0.0)
         let p1 = CIVector(x: 0.25, y: max(0.0, 0.25 - (shadow * 0.05)))
-        let p2 = CIVector(x: 0.50, y: 0.50 + (s * 0.025))
+        let p2 = CIVector(x: 0.50, y: 0.50 + (s * 0.03))
         let p3 = CIVector(x: 0.75, y: min(1.0, 0.75 + (s * 0.02)))
-        let p4 = CIVector(x: 1.0, y: 1.0 - (rollOff * 0.04))
+        let p4 = CIVector(x: 1.0, y: 1.0 - (rollOff * 0.05))
         
         currentImage = currentImage.applyingFilter("CIToneCurve", parameters: [
             "inputPoint0": p0,
@@ -118,7 +118,7 @@ public final class ProRAWProcessor {
         
         if let rawFilter = CIRAWFilter(imageURL: url) {
             rawFilter.sharpnessAmount = 0.0
-            rawFilter.luminanceNoiseReductionAmount = 0.10
+            rawFilter.luminanceNoiseReductionAmount = 0.08
             rawFilter.colorNoiseReductionAmount = 0.75
             rawFilter.boostAmount = 0.0
             baseCIImage = rawFilter.outputImage

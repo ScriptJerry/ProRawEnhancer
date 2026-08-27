@@ -17,7 +17,7 @@ public struct ContentView: View {
     @State private var alertMessage: String = ""
     
     @State private var settings: EnhancementSettings = .default
-    @State private var selectedPreset: String = "Leica Natural"
+    @State private var selectedPreset: String = "Sony A7 Pro"
     
     public init() {}
     
@@ -38,7 +38,7 @@ public struct ContentView: View {
                         VStack(spacing: 12) {
                             ProgressView()
                                 .scaleEffect(1.5)
-                            Text("Carregando ProRAW em 16-Bit e calibrando cores...")
+                            Text("Carregando ProRAW e aplicando motor de IA...")
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(.secondary)
                         }
@@ -57,8 +57,8 @@ public struct ContentView: View {
                         VStack(spacing: 20) {
                             if cachedPreviewCIImage != nil {
                                 presetSelectorSection
-                                semanticRetouchSection
                                 neuralEngineSection
+                                semanticRetouchSection
                                 adjustmentSlidersSection
                             }
                         }
@@ -138,56 +138,56 @@ public struct ContentView: View {
             
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    presetButton(title: "Leica Natural", icon: "circle.circle", preset: .default)
                     presetButton(title: "Sony A7 Pro", icon: "sparkles", preset: EnhancementSettings(
-                        microContrast: 0.30,
-                        toneDepth: 0.35,
+                        microContrast: 0.45,
+                        toneDepth: 0.40,
                         highlightRollOff: 0.70,
-                        shadowRichness: 0.15,
+                        shadowRichness: 0.20,
                         opticalGrain: 0.0,
-                        colorVibrance: 0.12,
+                        colorVibrance: 0.15,
                         enableNeuralEngine: true,
-                        neuralTextureDetail: 0.45,
+                        neuralTextureDetail: 1.0, // 100% de reconstrução de textura profunda
                         enableSemanticRetouch: true,
-                        hairDetailBoost: 0.40,
-                        skinSmoothing: 0.25,
-                        skyEnhancement: 0.25,
-                        teethBrightening: 0.25,
-                        glassesClarity: 0.25,
-                        opticalBokehDepth: 0.0
-                    ))
-                    presetButton(title: "Arri Cinema", icon: "film", preset: EnhancementSettings(
-                        microContrast: 0.20,
-                        toneDepth: 0.50,
-                        highlightRollOff: 0.85,
-                        shadowRichness: 0.25,
-                        opticalGrain: 0.0,
-                        colorVibrance: 0.08,
-                        enableNeuralEngine: true,
-                        neuralTextureDetail: 0.30,
-                        enableSemanticRetouch: true,
-                        hairDetailBoost: 0.30,
+                        hairDetailBoost: 0.60,
                         skinSmoothing: 0.30,
                         skyEnhancement: 0.35,
-                        teethBrightening: 0.20,
-                        glassesClarity: 0.20,
+                        teethBrightening: 0.30,
+                        glassesClarity: 0.35,
                         opticalBokehDepth: 0.0
                     ))
-                    presetButton(title: "Pure Sensor", icon: "camera.filters", preset: EnhancementSettings(
-                        microContrast: 0.0,
-                        toneDepth: 0.10,
-                        highlightRollOff: 0.20,
-                        shadowRichness: 0.0,
+                    presetButton(title: "Ultra Detail 200%", icon: "bolt.fill", preset: EnhancementSettings(
+                        microContrast: 0.60,
+                        toneDepth: 0.45,
+                        highlightRollOff: 0.75,
+                        shadowRichness: 0.20,
                         opticalGrain: 0.0,
-                        colorVibrance: 0.0,
-                        enableNeuralEngine: false,
-                        neuralTextureDetail: 0.0,
-                        enableSemanticRetouch: false,
-                        hairDetailBoost: 0.0,
-                        skinSmoothing: 0.0,
-                        skyEnhancement: 0.0,
-                        teethBrightening: 0.0,
-                        glassesClarity: 0.0,
+                        colorVibrance: 0.15,
+                        enableNeuralEngine: true,
+                        neuralTextureDetail: 1.50, // Super reconstrução de 150%
+                        enableSemanticRetouch: true,
+                        hairDetailBoost: 0.80,
+                        skinSmoothing: 0.25,
+                        skyEnhancement: 0.40,
+                        teethBrightening: 0.30,
+                        glassesClarity: 0.40,
+                        opticalBokehDepth: 0.0
+                    ))
+                    presetButton(title: "Leica Natural", icon: "circle.circle", preset: .default)
+                    presetButton(title: "Arri Cinema", icon: "film", preset: EnhancementSettings(
+                        microContrast: 0.30,
+                        toneDepth: 0.55,
+                        highlightRollOff: 0.85,
+                        shadowRichness: 0.30,
+                        opticalGrain: 0.0,
+                        colorVibrance: 0.10,
+                        enableNeuralEngine: true,
+                        neuralTextureDetail: 0.60,
+                        enableSemanticRetouch: true,
+                        hairDetailBoost: 0.40,
+                        skinSmoothing: 0.35,
+                        skyEnhancement: 0.40,
+                        teethBrightening: 0.20,
+                        glassesClarity: 0.25,
                         opticalBokehDepth: 0.0
                     ))
                 }
@@ -216,6 +216,32 @@ public struct ContentView: View {
                     .stroke(Color.gray.opacity(0.2), lineWidth: isSelected ? 0 : 1)
             )
         }
+    }
+    
+    private var neuralEngineSection: some View {
+        VStack(spacing: 12) {
+            Toggle(isOn: $settings.enableNeuralEngine) {
+                HStack(spacing: 8) {
+                    Image(systemName: "cpu.fill")
+                        .foregroundColor(.yellow)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Apple Neural Engine (IA)")
+                            .font(.system(size: 14, weight: .bold))
+                        Text("Reconstrução profunda de textura multi-oitavas")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .tint(.accentColor)
+            
+            if settings.enableNeuralEngine {
+                sliderRow(title: "Potência da Textura Neural", value: $settings.neuralTextureDetail, range: 0.0...2.0, icon: "sparkles")
+            }
+        }
+        .padding(16)
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .cornerRadius(16)
     }
     
     private var semanticRetouchSection: some View {
@@ -248,7 +274,7 @@ public struct ContentView: View {
                 }
                 .padding(.vertical, 2)
                 
-                sliderRow(title: "Nitidez em Cabelos & Barba", value: $settings.hairDetailBoost, range: 0.0...1.0, icon: "comb.fill")
+                sliderRow(title: "Nitidez em Cabelos & Barba", value: $settings.hairDetailBoost, range: 0.0...1.5, icon: "comb.fill")
                 sliderRow(title: "Retoque Orgânico de Pele", value: $settings.skinSmoothing, range: 0.0...1.0, icon: "face.smiling.inverse")
                 sliderRow(title: "Céu & Nuvens (Gradiente)", value: $settings.skyEnhancement, range: 0.0...1.0, icon: "cloud.sun.fill")
                 sliderRow(title: "Clareamento Natural de Sorriso", value: $settings.teethBrightening, range: 0.0...1.0, icon: "mouth.fill")
@@ -276,35 +302,9 @@ public struct ContentView: View {
         .cornerRadius(8)
     }
     
-    private var neuralEngineSection: some View {
-        VStack(spacing: 12) {
-            Toggle(isOn: $settings.enableNeuralEngine) {
-                HStack(spacing: 8) {
-                    Image(systemName: "cpu.fill")
-                        .foregroundColor(.yellow)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Apple Neural Engine (IA)")
-                            .font(.system(size: 14, weight: .bold))
-                        Text("Acutância óptica pura de micro-textura")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-            .tint(.accentColor)
-            
-            if settings.enableNeuralEngine {
-                sliderRow(title: "Micro-Textura Orgânica", value: $settings.neuralTextureDetail, range: 0.0...1.0, icon: "sparkles")
-            }
-        }
-        .padding(16)
-        .background(Color(uiColor: .secondarySystemGroupedBackground))
-        .cornerRadius(16)
-    }
-    
     private var adjustmentSlidersSection: some View {
         VStack(spacing: 16) {
-            sliderRow(title: "Micro-Contraste de Lente", value: $settings.microContrast, range: 0.0...1.0, icon: "scope")
+            sliderRow(title: "Micro-Contraste de Lente", value: $settings.microContrast, range: 0.0...1.5, icon: "scope")
             sliderRow(title: "Highlight Roll-Off (Luzes)", value: $settings.highlightRollOff, range: 0.0...1.0, icon: "sun.max")
             sliderRow(title: "Profundidade Tonal (Curva S)", value: $settings.toneDepth, range: 0.0...1.0, icon: "slider.vertical.3")
             sliderRow(title: "Riqueza de Sombras", value: $settings.shadowRichness, range: 0.0...1.0, icon: "moon.fill")
@@ -377,7 +377,7 @@ public struct ContentView: View {
     // MARK: - Core Processing Logic
     
     private func resetToDefault() {
-        selectedPreset = "Leica Natural"
+        selectedPreset = "Sony A7 Pro"
         settings = .default
     }
     
@@ -449,7 +449,7 @@ public struct ContentView: View {
                     DispatchQueue.main.async {
                         self.isSaving = false
                         if success {
-                            self.alertMessage = "Foto salva em 16-Bit com renderização de estúdio!"
+                            self.alertMessage = "Foto salva em 16-Bit com alta potência de textura!"
                             self.showSavedAlert = true
                         } else {
                             self.alertMessage = "Erro ao salvar: \(error?.localizedDescription ?? "Permissão negada.")"

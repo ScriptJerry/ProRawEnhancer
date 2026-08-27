@@ -3,34 +3,47 @@ import CoreImage
 import CoreImage.CIFilterBuiltins
 import UIKit
 
-/// Motor de Restauração de Micro-Textura (Acutância Óptica Pura sem Borrão e sem Halos)
+/// Motor Neural de Restauração de Alta Potência (Multi-Octave Detail & Acutance Engine)
 public final class NeuralEngineRestorer {
     public static let shared = NeuralEngineRestorer()
     
     private init() {}
     
-    /// Realça exclusivamente as micro-texturas reais (poros, tecidos, folhas) mantendo a imagem 100% nítida e cristalina
-    public func enhanceTexture(ciImage: CIImage, intensity: Float = 0.40) -> CIImage {
+    /// Aplica reconstrução profunda e agressiva de textura em multi-oitavas
+    public func enhanceTexture(ciImage: CIImage, intensity: Float = 0.75) -> CIImage {
         guard intensity > 0.01 else { return ciImage }
         
         let extent = ciImage.extent
         let maxDim = max(extent.width, extent.height)
-        let resScale = Float(max(1.0, maxDim / 2000.0))
+        let resScale = Float(max(1.0, maxDim / 1800.0))
         
-        // 1. Mantém a base 100% original e trava as bordas para não criar brilho na moldura
         let clamped = ciImage.clampedToExtent()
+        var current = clamped
         
-        // 2. Acutância Óptica de Raio Ultra-Estreito:
-        // Um raio abaixo de 1.0 atua APENAS em detalhes microscópicos,
-        // sendo matematicamente incapaz de criar bordas brancas/halos ao redor de objetos.
-        let opticalRadius = 0.85 * resScale
-        let opticalIntensity = intensity * 0.75
+        // ESTÁGIO 1: Micro-Textura Fina de Alta Energia (Fios, poros, tramas de tecido, folhagens)
+        let fineRadius = 1.1 * resScale
+        let fineIntensity = intensity * 2.2 // Ganho de alta potência
+        current = current.applyingFilter("CIUnsharpMask", parameters: [
+            kCIInputRadiusKey: fineRadius,
+            kCIInputIntensityKey: fineIntensity
+        ])
         
-        let enhanced = clamped.applyingFilter("CIUnsharpMask", parameters: [
-            kCIInputRadiusKey: opticalRadius,
-            kCIInputIntensityKey: opticalIntensity
-        ]).cropped(to: extent)
+        // ESTÁGIO 2: Acutância de Média Frequência (Definição de bordas internas e nitidez óptica de lente Prime)
+        let midRadius = 3.0 * resScale
+        let midIntensity = intensity * 1.3
+        current = current.applyingFilter("CIUnsharpMask", parameters: [
+            kCIInputRadiusKey: midRadius,
+            kCIInputIntensityKey: midIntensity
+        ])
         
-        return enhanced
+        // ESTÁGIO 3: Micro-Contraste e Clareza Local (Pop 3D tátil sem criar bordas brancas)
+        let localRadius = 7.5 * resScale
+        let localIntensity = intensity * 0.65
+        current = current.applyingFilter("CIUnsharpMask", parameters: [
+            kCIInputRadiusKey: localRadius,
+            kCIInputIntensityKey: localIntensity
+        ])
+        
+        return current.cropped(to: extent)
     }
 }
