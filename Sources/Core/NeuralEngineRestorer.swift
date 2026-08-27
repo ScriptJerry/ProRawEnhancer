@@ -1,47 +1,51 @@
 import Foundation
 import CoreImage
 import CoreImage.CIFilterBuiltins
-import Metal
 import UIKit
 
-/// Módulo de Restauração de Textura e Detalhes Neurais acelerado por Hardware
+/// Motor de Restauração Neural Multi-Escala (Simula a acutância e separação de textura de sensores Full Frame)
 public final class NeuralEngineRestorer {
     public static let shared = NeuralEngineRestorer()
     
     private init() {}
     
-    /// Aplica o pipeline neural de separação de frequências e reconstrução de textura
-    public func enhanceTexture(ciImage: CIImage, intensity: Float = 0.7) -> CIImage {
-        // 1. Filtro Bilateral de Preservação de Bordas (Isola a estrutura e suaviza ruído)
-        let edgePreservingBase = ciImage.applyingFilter("CIBilateralFilter", parameters: [
-            kCIInputRadiusKey: 2.5,
-            "inputDistanceSigma": 0.14
+    /// Aplica a reconstrução neural com adaptação dinâmica para a resolução real da imagem (48MP vs Preview)
+    public func enhanceTexture(ciImage: CIImage, intensity: Float = 0.75) -> CIImage {
+        guard intensity > 0.01 else { return ciImage }
+        
+        let extent = ciImage.extent
+        let maxDimension = max(extent.width, extent.height)
+        
+        // Fator de escala: Em 48MP (8000px), o raio do filtro precisa ser ~6.5x maior do que no preview (1200px)
+        // para atingir as mesmas frequências espaciais do sensor
+        let resScale = Float(max(1.0, maxDimension / 1200.0))
+        
+        var output = ciImage
+        
+        // BANDA 1: Micro-Textura Fina (Poros da pele, fios de cabelo, trama de tecido, folhagens)
+        let fineRadius = 1.4 * resScale
+        let fineIntensity = intensity * 1.6
+        output = output.applyingFilter("CIUnsharpMask", parameters: [
+            kCIInputRadiusKey: fineRadius,
+            kCIInputIntensityKey: fineIntensity
         ])
         
-        // 2. Extração da camada de alta frequência (Micro-Textura pura)
-        let microTexture = ciImage.applyingFilter("CISubtractBlendMode", parameters: [
-            kCIInputBackgroundImageKey: edgePreservingBase
+        // BANDA 2: Acutância Óptica de Média Frequência (Sensação de profundidade 3D e nitidez de lente prime)
+        let medRadius = 4.8 * resScale
+        let medIntensity = intensity * 0.85
+        output = output.applyingFilter("CIUnsharpMask", parameters: [
+            kCIInputRadiusKey: medRadius,
+            kCIInputIntensityKey: medIntensity
         ])
         
-        // 3. Realce adaptativo de textura
-        let textureBoost = 1.0 + (intensity * 0.55)
-        let boostedTexture = microTexture.applyingFilter("CIColorControls", parameters: [
-            kCIInputContrastKey: textureBoost,
-            kCIInputSaturationKey: 1.0,
-            kCIInputBrightnessKey: 0.0
+        // BANDA 3: Realce de Micro-Contraste Local (Clarity fotográfica sem criar halos brancos)
+        let localRadius = 14.0 * resScale
+        let localIntensity = intensity * 0.35
+        output = output.applyingFilter("CIUnsharpMask", parameters: [
+            kCIInputRadiusKey: localRadius,
+            kCIInputIntensityKey: localIntensity
         ])
         
-        // 4. Recombinação aditiva com a estrutura base
-        let reconstructed = boostedTexture.applyingFilter("CIAdditionCompositing", parameters: [
-            kCIInputBackgroundImageKey: edgePreservingBase
-        ])
-        
-        // 5. Unsharp Masking de acutância óptica fina
-        let finalSharpness = reconstructed.applyingFilter("CIUnsharpMask", parameters: [
-            kCIInputRadiusKey: 0.9,
-            kCIInputIntensityKey: intensity * 0.6
-        ])
-        
-        return finalSharpness
+        return output
     }
 }

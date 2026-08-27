@@ -4,14 +4,14 @@ import CoreImage.CIFilterBuiltins
 import UIKit
 
 public struct EnhancementSettings: Equatable {
-    public var microContrast: Float = 0.5          // Realce de textura óptica fina
-    public var toneDepth: Float = 0.6              // Curva tonal S cinematográfica
-    public var highlightRollOff: Float = 0.7        // Suavização das altas luzes
-    public var shadowRichness: Float = 0.3          // Pretos aprofundados
-    public var opticalGrain: Float = 0.15           // Grão de sensor analógico
-    public var colorVibrance: Float = 0.15          // Vibração Display P3
-    public var enableNeuralEngine: Bool = true      // Ativa a Restauração Neural
-    public var neuralTextureDetail: Float = 0.70    // Intensidade da reconstrução de textura
+    public var microContrast: Float = 0.65         // Micro-contraste óptico
+    public var toneDepth: Float = 0.60             // Curva tonal S cinematográfica
+    public var highlightRollOff: Float = 0.75       // Suavização das altas luzes
+    public var shadowRichness: Float = 0.30         // Pretos aprofundados
+    public var opticalGrain: Float = 0.15          // Grão de sensor analógico
+    public var colorVibrance: Float = 0.18         // Vibração Display P3
+    public var enableNeuralEngine: Bool = true     // Ativa a Restauração Neural
+    public var neuralTextureDetail: Float = 0.85   // Intensidade da reconstrução de textura
     
     public static let `default` = EnhancementSettings()
 }
@@ -30,19 +30,24 @@ public final class ProRAWProcessor {
         ])
     }
     
-    /// Processa a imagem aplicando o pipeline óptico + restauração por hardware Neural Engine
+    /// Processa a imagem aplicando o pipeline óptico + reconstrução neural multi-escala
     public func process(inputImage: CIImage, settings: EnhancementSettings = .default, isDraft: Bool = false) -> UIImage? {
         var currentImage = inputImage
         
-        // 1. RESTAURAÇÃO NEURAL DE TEXTURA (Neural Engine / Hardware Acceleration)
-        if settings.enableNeuralEngine && !isDraft {
+        let extent = inputImage.extent
+        let maxDim = max(extent.width, extent.height)
+        let resScale = Float(max(1.0, maxDim / 1200.0))
+        
+        // 1. RESTAURAÇÃO NEURAL DE TEXTURA (Multi-Banda: Fina, Média e Estrutura)
+        // Agora visível tanto no Preview ao vivo quanto na Exportação de 48MP
+        if settings.enableNeuralEngine {
             currentImage = NeuralEngineRestorer.shared.enhanceTexture(ciImage: currentImage, intensity: settings.neuralTextureDetail)
         }
         
-        // 2. MICRO-CONTRASTE ÓPTICO
+        // 2. MICRO-CONTRASTE ÓPTICO ADAPTATIVO
         if settings.microContrast > 0.01 {
-            let radius: Float = isDraft ? 0.8 : 1.1
-            let intensity = settings.microContrast * 0.75
+            let radius = (isDraft ? 1.0 : 1.8) * resScale
+            let intensity = settings.microContrast * 1.1
             currentImage = currentImage.applyingFilter("CIUnsharpMask", parameters: [
                 kCIInputRadiusKey: radius,
                 kCIInputIntensityKey: intensity
@@ -55,10 +60,10 @@ public final class ProRAWProcessor {
         let shadow = CGFloat(settings.shadowRichness)
         
         let p0 = CIVector(x: 0.0, y: 0.0)
-        let p1 = CIVector(x: 0.25, y: max(0.0, 0.25 - (shadow * 0.08)))
-        let p2 = CIVector(x: 0.50, y: 0.50 + (s * 0.05))
-        let p3 = CIVector(x: 0.75, y: min(1.0, 0.75 + (s * 0.04)))
-        let p4 = CIVector(x: 1.0, y: 1.0 - (rollOff * 0.07))
+        let p1 = CIVector(x: 0.25, y: max(0.0, 0.25 - (shadow * 0.10)))
+        let p2 = CIVector(x: 0.50, y: 0.50 + (s * 0.06))
+        let p3 = CIVector(x: 0.75, y: min(1.0, 0.75 + (s * 0.05)))
+        let p4 = CIVector(x: 1.0, y: 1.0 - (rollOff * 0.08))
         
         currentImage = currentImage.applyingFilter("CIToneCurve", parameters: [
             "inputPoint0": p0,
@@ -75,19 +80,14 @@ public final class ProRAWProcessor {
             ])
         }
         
-        // 5. GRÃO ÓPTICO DE SENSOR (Textura orgânica de filme)
+        // 5. GRÃO ÓPTICO DE SENSOR
         if settings.opticalGrain > 0.01 && !isDraft {
             currentImage = applyFastGrain(to: currentImage, amount: settings.opticalGrain)
         }
         
-        // Renderização final na GPU
+        // Renderização acelerada pela GPU
         if let cgImage = ciContext.createCGImage(currentImage, from: currentImage.extent) {
             return UIImage(cgImage: cgImage)
-        }
-        
-        // Fallback de segurança para renderização direta
-        if let fallbackCG = ciContext.createCGImage(inputImage, from: inputImage.extent) {
-            return UIImage(cgImage: fallbackCG)
         }
         
         return nil
@@ -100,7 +100,7 @@ public final class ProRAWProcessor {
         // Tenta carregar como RAW nativo via CIRAWFilter
         if let rawFilter = CIRAWFilter(imageURL: url) {
             rawFilter.sharpnessAmount = 0.0
-            rawFilter.luminanceNoiseReductionAmount = 0.10
+            rawFilter.luminanceNoiseReductionAmount = 0.08
             rawFilter.colorNoiseReductionAmount = 0.75
             rawFilter.boostAmount = 0.0
             baseCIImage = rawFilter.outputImage
