@@ -248,7 +248,24 @@ public final class ProRAWProcessor {
                     decode: nil, shouldInterpolate: true,
                     intent: .defaultIntent
                    ) {
-                    return (CIImage(cgImage: cgGainMap), headroom)
+                    var gainMapImage = CIImage(cgImage: cgGainMap)
+                    
+                    // Extrai a orientação EXIF da imagem principal para alinhar perfeitamente o Gain Map e evitar distorção ou rotação incorreta
+                    if let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] {
+                        var orientationVal: UInt32? = nil
+                        if let o = properties[kCGImagePropertyOrientation as String] as? UInt32 {
+                            orientationVal = o
+                        } else if let tiffDict = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any],
+                                  let o = tiffDict[kCGImagePropertyTIFFOrientation as String] as? UInt32 {
+                            orientationVal = o
+                        }
+                        
+                        if let oVal = orientationVal, let orientation = CGImagePropertyOrientation(rawValue: oVal) {
+                            gainMapImage = gainMapImage.oriented(orientation)
+                        }
+                    }
+                    
+                    return (gainMapImage, headroom)
                 }
             }
         }
